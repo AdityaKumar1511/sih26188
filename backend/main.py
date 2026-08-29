@@ -58,15 +58,8 @@ async def health_check():
     return {"status": "healthy", "timestamp": time.time()}
 
 
-@app.post(
-    "/extract-and-validate",
-    response_model=ExtractAndValidateResponse,
-    responses={
-        400: {"model": ErrorResponse, "description": "Invalid file format or corrupted image"},
-        422: {"model": ErrorResponse, "description": "Unreadable document content"},
-        500: {"model": ErrorResponse, "description": "Internal processing error"}
-    }
-)
+@app.post("/extract-and-validate", response_model=ExtractAndValidateResponse)
+@app.post("/extract-and-validate/", response_model=ExtractAndValidateResponse)
 async def extract_and_validate(file: UploadFile = File(...)):
     """
     Main Endpoint:
@@ -516,6 +509,7 @@ async def extract_and_validate(file: UploadFile = File(...)):
 
 
 @app.post("/generate-audit-report")
+@app.post("/generate-audit-report/")
 async def generate_audit_report_endpoint(screening_data: Dict[str, Any]):
     """
     Generates a timestamped official PDF forensic audit certificate.

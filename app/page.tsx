@@ -270,7 +270,8 @@ const SAMPLE_PRESETS: SamplePreset[] = [
 
 // ============================================================================
 // LIVE FASTAPI BACKEND INTEGRATION & PDF EXPORT
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://sih26188-u5f9.onrender.com';
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://sih26188-u5f9.onrender.com';
+const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
 
 async function analyzeDocument(fileInput: File | SamplePreset): Promise<ScreeningResult> {
   // If user selected one of the instant demo presets
