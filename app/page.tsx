@@ -16,7 +16,6 @@ import {
   Scan,
   Cpu,
   Building2,
-  ChevronRight,
   Download,
   Check,
   X
@@ -70,219 +69,67 @@ interface ScreeningResult {
   forensicTrace: string[];
 }
 
-interface SamplePreset {
-  id: string;
-  name: string;
-  docType: string;
-  description: string;
-  badgeText: string;
-  badgeStyle: 'success' | 'danger';
-  previewUrl: string;
-  mockResult: ScreeningResult;
-}
-
-// ============================================================================
-// SAMPLE PRESET DATA (BLACK & ORANGE THEME)
-// ============================================================================
-
-const SAMPLE_PRESETS: SamplePreset[] = [
-  {
-    id: 'aadhaar-legit',
-    name: 'Sample 1: Legitimate Aadhaar',
-    docType: 'Aadhaar Card',
-    description: 'Clean document with valid QR signature, matching typography, and verified checksum.',
-    badgeText: 'Authentic (96%)',
-    badgeStyle: 'success',
-    previewUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80',
-    mockResult: {
-      authenticityScore: 96,
-      verdict: 'AUTHENTIC',
-      verdictDescription: 'Verified Authentic. Cryptographic checksums, font pitch, and micro-print structures match standard UIDAI templates.',
-      processingTimeMs: 1840,
-      documentType: 'Aadhaar Card (UIDAI Standard)',
-      confidence: 0.98,
-      boundingBoxes: [
-        {
-          id: 'b1',
-          label: 'UIDAI Emblem & Seal',
-          type: 'info',
-          x: 10,
-          y: 12,
-          width: 20,
-          height: 18,
-          description: 'Official emblem alignment and micro-text pattern verified.',
-          confidence: 0.99
-        },
-        {
-          id: 'b2',
-          label: 'Signed QR Code Payload',
-          type: 'info',
-          x: 70,
-          y: 50,
-          width: 22,
-          height: 38,
-          description: '2048-bit digital signature matches UIDAI PKI registry.',
-          confidence: 0.97
-        }
-      ],
-      extractedFields: [
-        { fieldName: 'Full Name', value: 'RAJESH KUMAR SHARMA', status: 'verified', confidence: 99 },
-        { fieldName: 'Aadhaar Number', value: '5489 2104 9812', status: 'verified', confidence: 98 },
-        { fieldName: 'Date of Birth', value: '14/08/1988', status: 'verified', confidence: 97 },
-        { fieldName: 'Gender', value: 'MALE', status: 'verified', confidence: 99 },
-        { fieldName: 'Address', value: 'H-42, Sector 62, Noida, Uttar Pradesh 201301', status: 'verified', confidence: 95 }
-      ],
-      validationChecks: [
-        { id: 'c1', name: 'Format & Layout Alignment', category: 'Structural', status: 'pass', details: 'Template dimensions match standard UIDAI spec v3.2', score: 98 },
-        { id: 'c2', name: 'Verhoeff Checksum Algorithm', category: 'Algorithmic', status: 'pass', details: 'Aadhaar 12-digit Verhoeff checksum valid', score: 100 },
-        { id: 'c3', name: 'Error Level Analysis (ELA)', category: 'Forensic', status: 'pass', details: 'Uniform JPEG compression map across document canvas', score: 95 },
-        { id: 'c4', name: 'Typography & Microprint', category: 'Typography', status: 'pass', details: 'Font pitch, kerning, and line spacing consistent', score: 94 },
-        { id: 'c5', name: 'Facial Boundary Integrity', category: 'Biometric', status: 'pass', details: 'No edge seam artifacts detected around photo frame', score: 96 }
-      ],
-      forensicTrace: [
-        'Digital signature hash verified against public key repository.',
-        'No pixel manipulation detected around Date of Birth field.',
-        'Uniform noise distribution confirmed across background substrate.'
-      ]
+const MOCK_TAMPERED_RESULT: ScreeningResult = {
+  authenticityScore: 34,
+  verdict: 'TAMPERED',
+  verdictDescription: 'Tampering Detected. Image splicing found in Date of Birth and Photo regions.',
+  processingTimeMs: 2210,
+  documentType: 'Permanent Account Number (PAN)',
+  confidence: 0.94,
+  boundingBoxes: [
+    {
+      id: 'b1',
+      label: 'Altered Date of Birth',
+      type: 'critical',
+      x: 32,
+      y: 46,
+      width: 36,
+      height: 14,
+      description: 'Font family mismatch. Inconsistent pixel noise compression (ELA spike).',
+      confidence: 0.96
+    },
+    {
+      id: 'b2',
+      label: 'Photo Boundary Splice',
+      type: 'critical',
+      x: 12,
+      y: 35,
+      width: 24,
+      height: 38,
+      description: 'Edge dissimilarity index > 0.42. Photo pasted over original card background.',
+      confidence: 0.91
     }
-  },
-  {
-    id: 'pan-tampered',
-    name: 'Sample 2: Tampered PAN Card',
-    docType: 'PAN Card',
-    description: 'Modified Date of Birth font and photo replacement detected by ELA scan.',
-    badgeText: 'Tampered (34%)',
-    badgeStyle: 'danger',
-    previewUrl: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=800&q=80',
-    mockResult: {
-      authenticityScore: 34,
-      verdict: 'TAMPERED',
-      verdictDescription: 'Tampering Detected. Image splicing found in Date of Birth and Photo regions.',
-      processingTimeMs: 2210,
-      documentType: 'Permanent Account Number (PAN)',
-      confidence: 0.94,
-      boundingBoxes: [
-        {
-          id: 'b1',
-          label: 'Altered Date of Birth',
-          type: 'critical',
-          x: 32,
-          y: 46,
-          width: 36,
-          height: 14,
-          description: 'Font family mismatch. Inconsistent pixel noise compression (ELA spike).',
-          confidence: 0.96
-        },
-        {
-          id: 'b2',
-          label: 'Photo Boundary Splice',
-          type: 'critical',
-          x: 12,
-          y: 35,
-          width: 24,
-          height: 38,
-          description: 'Edge dissimilarity index > 0.42. Photo pasted over original card background.',
-          confidence: 0.91
-        }
-      ],
-      extractedFields: [
-        { fieldName: 'Full Name', value: 'VIKRAM SINGH MEHTA', status: 'verified', confidence: 96 },
-        { fieldName: 'PAN Number', value: 'ABCDE1234F', status: 'verified', confidence: 95 },
-        { fieldName: 'Father\'s Name', value: 'HARISH CHANDRA MEHTA', status: 'verified', confidence: 93 },
-        { fieldName: 'Date of Birth', value: '01/01/1995', status: 'flagged', confidence: 42, anomalyDetails: 'Font mismatch. Original scan raster: 12/05/1982' },
-        { fieldName: 'Issue Status', value: 'Active in NSDL Registry', status: 'warning', confidence: 88 }
-      ],
-      validationChecks: [
-        { id: 'c1', name: 'Format & Layout Alignment', category: 'Structural', status: 'pass', details: 'Card dimensions match 85.6mm x 53.98mm CR80 spec', score: 90 },
-        { id: 'c2', name: 'PAN Modulo-26 Check Digit', category: 'Algorithmic', status: 'pass', details: '5th character "E" matches surname letter correctly', score: 98 },
-        { id: 'c3', name: 'Error Level Analysis (ELA)', category: 'Forensic', status: 'fail', details: 'Severe ELA compression variance around Date of Birth text block', score: 18 },
-        { id: 'c4', name: 'Typography & Font Consistency', category: 'Typography', status: 'fail', details: 'DOB font renders Arial instead of Income Tax OCR-B font', score: 25 },
-        { id: 'c5', name: 'Facial Boundary Integrity', category: 'Biometric', status: 'fail', details: 'Color gradient discontinuity around photo margin', score: 32 }
-      ],
-      forensicTrace: [
-        'CRITICAL: Digital patch detected on Date of Birth digits.',
-        'Headshot replacement detected using Laplacian edge analysis.',
-        'Card background pattern broken around photo frame.'
-      ]
-    }
-  },
-  {
-    id: 'dl-fake',
-    name: 'Sample 3: Fake Driving License',
-    docType: 'Driving License',
-    description: 'Forged document number format & non-existent QR payload.',
-    badgeText: 'Fraudulent (18%)',
-    badgeStyle: 'danger',
-    previewUrl: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=800&q=80',
-    mockResult: {
-      authenticityScore: 18,
-      verdict: 'TAMPERED',
-      verdictDescription: 'Severe Forgery. Invalid RTO series code and forged QR payload structure.',
-      processingTimeMs: 2450,
-      documentType: 'Indian Driving License (State Transport)',
-      confidence: 0.97,
-      boundingBoxes: [
-        {
-          id: 'b1',
-          label: 'Invalid DL Number Format',
-          type: 'critical',
-          x: 18,
-          y: 20,
-          width: 55,
-          height: 15,
-          description: 'DL number structure fails Ministry of Road Transport algorithm.',
-          confidence: 0.99
-        },
-        {
-          id: 'b2',
-          label: 'Unverified QR Payload',
-          type: 'critical',
-          x: 72,
-          y: 55,
-          width: 22,
-          height: 35,
-          description: 'QR code decodes to generic web link instead of signed Vahan XML payload.',
-          confidence: 0.98
-        }
-      ],
-      extractedFields: [
-        { fieldName: 'Full Name', value: 'AMIT PRAKASH', status: 'flagged', confidence: 55 },
-        { fieldName: 'DL Number', value: 'DL-0420210099999', status: 'flagged', confidence: 20, anomalyDetails: 'State RTO Code 0420 is non-existent' },
-        { fieldName: 'Date of Issue', value: '15/03/2021', status: 'warning', confidence: 70 },
-        { fieldName: 'Valid Till', value: '14/03/2041', status: 'warning', confidence: 68 },
-        { fieldName: 'Blood Group', value: 'O+VE', status: 'verified', confidence: 90 }
-      ],
-      validationChecks: [
-        { id: 'c1', name: 'Format & Layout Alignment', category: 'Structural', status: 'fail', details: 'RTO emblem alignment shifted by 4.2mm', score: 45 },
-        { id: 'c2', name: 'Parivahan Checksum Algorithm', category: 'Algorithmic', status: 'fail', details: 'RTO series code 0420 does not exist in Delhi RTO database', score: 0 },
-        { id: 'c3', name: 'Error Level Analysis (ELA)', category: 'Forensic', status: 'fail', details: 'Entire card canvas generated via digital graphics editor', score: 22 },
-        { id: 'c4', name: 'Typography & Font Consistency', category: 'Typography', status: 'fail', details: 'Multiple font families detected across single line', score: 15 },
-        { id: 'c5', name: 'Facial Boundary Integrity', category: 'Biometric', status: 'fail', details: 'Synthetic GAN-generated face detected with 89% probability', score: 11 }
-      ],
-      forensicTrace: [
-        'CRITICAL: Non-standard RTO series code detected.',
-        'QR Code payload signature mismatch (Not signed by MoRTH authority).',
-        'Facial portrait exhibits deepfake GAN artifacts.'
-      ]
-    }
-  }
-];
+  ],
+  extractedFields: [
+    { fieldName: 'Full Name', value: 'VIKRAM SINGH MEHTA', status: 'verified', confidence: 96 },
+    { fieldName: 'PAN Number', value: 'ABCDE1234F', status: 'verified', confidence: 95 },
+    { fieldName: 'Father\'s Name', value: 'HARISH CHANDRA MEHTA', status: 'verified', confidence: 93 },
+    { fieldName: 'Date of Birth', value: '01/01/1995', status: 'flagged', confidence: 42, anomalyDetails: 'Font mismatch. Original scan raster: 12/05/1982' },
+    { fieldName: 'Issue Status', value: 'Active in NSDL Registry', status: 'warning', confidence: 88 }
+  ],
+  validationChecks: [
+    { id: 'c1', name: 'Format & Layout Alignment', category: 'Structural', status: 'pass', details: 'Card dimensions match 85.6mm x 53.98mm CR80 spec', score: 90 },
+    { id: 'c2', name: 'PAN Modulo-26 Check Digit', category: 'Algorithmic', status: 'pass', details: '5th character "E" matches surname letter correctly', score: 98 },
+    { id: 'c3', name: 'Error Level Analysis (ELA)', category: 'Forensic', status: 'fail', details: 'Severe ELA compression variance around Date of Birth text block', score: 18 },
+    { id: 'c4', name: 'Typography & Font Consistency', category: 'Typography', status: 'fail', details: 'DOB font renders Arial instead of Income Tax OCR-B font', score: 25 },
+    { id: 'c5', name: 'Facial Boundary Integrity', category: 'Biometric', status: 'fail', details: 'Color gradient discontinuity around photo margin', score: 32 }
+  ],
+  forensicTrace: [
+    'CRITICAL: Digital patch detected on Date of Birth digits.',
+    'Headshot replacement detected using Laplacian edge analysis.',
+    'Card background pattern broken around photo frame.'
+  ]
+};
 
 // ============================================================================
 // LIVE FASTAPI BACKEND INTEGRATION & PDF EXPORT
 const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://sih26188-u5f9.onrender.com';
 const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
 
-async function analyzeDocument(fileInput: File | SamplePreset): Promise<ScreeningResult> {
-  // If user selected one of the instant demo presets
-  if (typeof fileInput === 'object' && 'mockResult' in fileInput) {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    return fileInput.mockResult;
-  }
-
+async function analyzeDocument(fileInput: File): Promise<ScreeningResult> {
   // Live File Upload -> Send to FastAPI Backend
   const formData = new FormData();
-  formData.append('file', fileInput as File);
+  formData.append('file', fileInput);
 
   try {
     const response = await fetch(`${API_BASE_URL}/extract-and-validate`, {
@@ -405,7 +252,6 @@ async function exportPdfAuditReport(screeningResult: ScreeningResult) {
 export default function DocumentScreeningApp() {
   const [appState, setAppState] = useState<AppState>('upload');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedPreset, setSelectedPreset] = useState<SamplePreset | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   
@@ -443,18 +289,11 @@ export default function DocumentScreeningApp() {
       return;
     }
     setSelectedFile(file);
-    setSelectedPreset(null);
     setImagePreviewUrl(URL.createObjectURL(file));
   };
 
-  const handlePresetSelect = (preset: SamplePreset) => {
-    setSelectedPreset(preset);
-    setSelectedFile(null);
-    setImagePreviewUrl(preset.previewUrl);
-  };
-
   const handleStartScreening = async () => {
-    if (!selectedFile && !selectedPreset) return;
+    if (!selectedFile) return;
 
     setAppState('processing');
     setProcessingProgress(10);
@@ -480,8 +319,7 @@ export default function DocumentScreeningApp() {
     }, 450);
 
     try {
-      const input = selectedPreset || selectedFile!;
-      const result = await analyzeDocument(input);
+      const result = await analyzeDocument(selectedFile);
       
       clearInterval(interval);
       clearInterval(stepInterval);
@@ -502,7 +340,6 @@ export default function DocumentScreeningApp() {
   const handleReset = () => {
     setAppState('upload');
     setSelectedFile(null);
-    setSelectedPreset(null);
     setImagePreviewUrl(null);
     setScreeningResult(null);
     setSelectedBoxId(null);
@@ -669,54 +506,7 @@ export default function DocumentScreeningApp() {
               </div>
             </div>
 
-            {/* Test Sample Presets */}
-            <div className="max-w-3xl mx-auto pt-2">
-              <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3 text-center">
-                Or select a test document preset for instant demo:
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {SAMPLE_PRESETS.map((preset) => {
-                  const isSelected = selectedPreset?.id === preset.id;
-                  return (
-                    <div
-                      key={preset.id}
-                      onClick={() => handlePresetSelect(preset)}
-                      className={`matte-card p-4 transition cursor-pointer text-left flex flex-col justify-between ${
-                        isSelected
-                          ? 'border-orange-500 bg-dark-800 ring-1 ring-orange-500'
-                          : 'hover:border-dark-600 bg-dark-850'
-                      }`}
-                    >
-                      <div>
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <span className="text-xs font-bold text-white truncate">
-                            {preset.docType}
-                          </span>
-                          <span
-                            className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded ${
-                              preset.badgeStyle === 'success'
-                                ? 'bg-emerald-950 text-emerald-400 border border-emerald-900'
-                                : 'bg-red-950 text-red-400 border border-red-900'
-                            }`}
-                          >
-                            {preset.badgeText}
-                          </span>
-                        </div>
-                        <p className="text-xs text-neutral-400 line-clamp-2 mb-3">
-                          {preset.description}
-                        </p>
-                      </div>
-
-                      <div className="pt-2 border-t border-dark-700 flex items-center justify-between text-xs text-orange-500 font-medium">
-                        <span>Load Sample</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
 
           </div>
         )}
