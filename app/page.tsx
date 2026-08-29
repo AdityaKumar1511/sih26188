@@ -269,74 +269,134 @@ const SAMPLE_PRESETS: SamplePreset[] = [
 ];
 
 // ============================================================================
-// PLACEHOLDER API FUNCTION (FOR FASTAPI WIRING)
+// LIVE FASTAPI BACKEND INTEGRATION & PDF EXPORT
 // ============================================================================
 
-async function analyzeDocument(fileInput: File | SamplePreset): Promise<ScreeningResult> {
-  await new Promise((resolve) => setTimeout(resolve, 2200));
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
+async function analyzeDocument(fileInput: File | SamplePreset): Promise<ScreeningResult> {
+  // If user selected one of the instant demo presets
   if (typeof fileInput === 'object' && 'mockResult' in fileInput) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     return fileInput.mockResult;
   }
 
-  const fileName = (fileInput as File).name.toLowerCase();
-  const isLikelyTampered = fileName.includes('fake') || fileName.includes('edit') || fileName.includes('mod');
-  
-  if (isLikelyTampered) {
-    return SAMPLE_PRESETS[1].mockResult;
-  }
+  // Live File Upload -> Send to FastAPI Backend
+  const formData = new FormData();
+  formData.append('file', fileInput as File);
 
-  return {
-    authenticityScore: 91,
-    verdict: 'AUTHENTIC',
-    verdictDescription: 'Document verified with high confidence. Format, checksums, and font consistency match official government templates.',
-    processingTimeMs: 2150,
-    documentType: 'Government Identity Document',
-    confidence: 0.95,
-    boundingBoxes: [
-      {
-        id: 'b1',
-        label: 'Official Seal Pattern',
-        type: 'info',
-        x: 12,
-        y: 15,
-        width: 18,
-        height: 16,
-        description: 'Emblem micro-print alignment verified.',
-        confidence: 0.96
-      },
-      {
-        id: 'b2',
-        label: 'Minor Compression Noise',
-        type: 'warning',
-        x: 45,
-        y: 60,
-        width: 30,
-        height: 20,
-        description: 'Low-risk JPEG re-compression detected.',
-        confidence: 0.78
-      }
-    ],
-    extractedFields: [
-      { fieldName: 'Full Name', value: 'ANANYA VERMA', status: 'verified', confidence: 97 },
-      { fieldName: 'ID Number', value: 'IND-9842-7710-X', status: 'verified', confidence: 96 },
-      { fieldName: 'Date of Birth', value: '22/11/1992', status: 'verified', confidence: 95 },
-      { fieldName: 'Gender', value: 'FEMALE', status: 'verified', confidence: 98 },
-      { fieldName: 'Document Category', value: 'Government Identity Card', status: 'verified', confidence: 99 }
-    ],
-    validationChecks: [
-      { id: 'c1', name: 'Format & Layout Alignment', category: 'Structural', status: 'pass', details: 'Document boundary matches official template schema', score: 94 },
-      { id: 'c2', name: 'Checksum & Algorithmic Hash', category: 'Algorithmic', status: 'pass', details: 'Embedded checksum matches calculated hash', score: 98 },
-      { id: 'c3', name: 'Error Level Analysis (ELA)', category: 'Forensic', status: 'pass', details: 'No high-frequency edit spikes found', score: 88 },
-      { id: 'c4', name: 'Typography & Font Consistency', category: 'Typography', status: 'pass', details: 'Single typeface family across text headers', score: 92 },
-      { id: 'c5', name: 'Facial Biometric Integrity', category: 'Biometric', status: 'pass', details: 'Face boundary natural with no blending masks', score: 91 }
-    ],
-    forensicTrace: [
-      'Document structure adheres to standardized government template.',
-      'No clone-stamp or copy-paste artifacts detected.',
-      'OCR text extraction matched with 97% confidence.'
-    ]
-  };
+  try {
+    const response = await fetch(`${API_BASE_URL}/extract-and-validate`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Screening API error');
+    }
+
+    const data = await response.json();
+
+    // Map FastAPI structured JSON to Frontend ScreeningResult
+    return {
+      authenticityScore: data.authenticity_score,
+      verdict: data.verdict,
+      verdictDescription: `${data.verdict === 'AUTHENTIC' ? 'Verified Authentic' : (data.verdict === 'TAMPERED' ? 'Tampering / Forgery Detected' : 'Suspicious / Unverified Identity')}. ${data.checksum_result.details}`,
+      processingTimeMs: data.processing_time_ms,
+      documentType: data.document_type,
+      confidence: data.confidence,
+      boundingBoxes: [
+        {
+          id: 'b1',
+          label: data.checksum_result.passed ? 'Verified Checksum' : 'Checksum Anomaly',
+          type: data.checksum_result.passed ? 'info' : 'critical',
+          x: 25,
+          y: 42,
+          width: 50,
+          height: 18,
+          description: data.checksum_result.details,
+          confidence: data.confidence
+        },
+        ...(data.qr_verification?.detected ? [{
+          id: 'b2',
+          label: data.qr_verification.status === 'VERIFIED' ? 'Verified QR Code' : 'Flagged QR Payload',
+          type: (data.qr_verification.status === 'VERIFIED' ? 'info' : 'critical') as 'info' | 'critical',
+          x: 70,
+          y: 55,
+          width: 25,
+          height: 35,
+          description: data.qr_verification.details,
+          confidence: 0.95
+        }] : [])
+      ],
+      extractedFields: data.extracted_fields.map((f: any) => ({
+        fieldName: f.field_name,
+        value: f.value || 'N/A',
+        status: f.status,
+        confidence: f.confidence,
+        anomalyDetails: f.anomaly_details
+      })),
+      validationChecks: data.validation_checks.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        category: c.category,
+        status: c.status,
+        details: c.details,
+        score: c.score
+      })),
+      forensicTrace: data.forensic_trace
+    };
+  } catch (error: any) {
+    console.error('Backend connection failed:', error);
+    throw new Error(error.message || 'Could not connect to FastAPI screening engine at ' + API_BASE_URL);
+  }
+}
+
+async function exportPdfAuditReport(screeningResult: ScreeningResult) {
+  try {
+    const payload = {
+      document_type: screeningResult.documentType,
+      verdict: screeningResult.verdict,
+      authenticity_score: screeningResult.authenticityScore,
+      extracted_fields: screeningResult.extractedFields.map(f => ({
+        field_name: f.fieldName,
+        value: f.value,
+        status: f.status,
+        confidence: f.confidence
+      })),
+      validation_checks: screeningResult.validationChecks.map(c => ({
+        name: c.name,
+        category: c.category,
+        status: c.status,
+        details: c.details,
+        score: c.score
+      })),
+      forensic_trace: screeningResult.forensicTrace
+    };
+
+    const response = await fetch(`${API_BASE_URL}/generate-audit-report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to generate PDF report from server');
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `MHA_Forensic_Audit_${screeningResult.documentType.replace(/\s+/g, '_')}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (err: any) {
+    alert(`Could not export PDF: ${err.message}`);
+  }
 }
 
 // ============================================================================
@@ -742,9 +802,11 @@ export default function DocumentScreeningApp() {
                 
                 {/* Score Box */}
                 <div className={`w-20 h-20 rounded-xl flex flex-col items-center justify-center font-mono border ${
-                  screeningResult.authenticityScore >= 85
-                    ? 'bg-emerald-950 border-emerald-900 text-emerald-400'
-                    : 'bg-red-950 border-red-900 text-red-400'
+                  screeningResult.verdict === 'AUTHENTIC'
+                    ? 'bg-emerald-950/80 border-emerald-800 text-emerald-400'
+                    : screeningResult.verdict === 'SUSPICIOUS'
+                    ? 'bg-amber-950/70 border-amber-800/80 text-amber-400'
+                    : 'bg-red-950/80 border-red-900 text-red-400'
                 }`}>
                   <span className="text-2xl font-extrabold">{screeningResult.authenticityScore}</span>
                   <span className="text-[10px] text-neutral-400 font-sans uppercase">Score</span>
@@ -756,9 +818,15 @@ export default function DocumentScreeningApp() {
                     <span className={`text-xs font-bold font-mono px-2.5 py-1 rounded border ${
                       screeningResult.verdict === 'AUTHENTIC'
                         ? 'bg-emerald-950 text-emerald-400 border-emerald-900'
+                        : screeningResult.verdict === 'SUSPICIOUS'
+                        ? 'bg-amber-950 text-amber-400 border-amber-900/80'
                         : 'bg-red-950 text-red-400 border-red-900'
                     }`}>
-                      {screeningResult.verdict === 'AUTHENTIC' ? '✓ VERIFIED AUTHENTIC' : '⚠ TAMPERING DETECTED'}
+                      {screeningResult.verdict === 'AUTHENTIC'
+                        ? '✓ VERIFIED AUTHENTIC'
+                        : screeningResult.verdict === 'SUSPICIOUS'
+                        ? '⚠ SUSPICIOUS / UNVERIFIED'
+                        : '✕ TAMPERING DETECTED'}
                     </span>
                     <span className="text-xs text-neutral-400 font-mono">
                       Type: <strong className="text-white">{screeningResult.documentType}</strong>
@@ -777,16 +845,16 @@ export default function DocumentScreeningApp() {
               {/* Action Buttons */}
               <div className="flex items-center gap-3 w-full md:w-auto justify-end border-t md:border-t-0 pt-4 md:pt-0 border-dark-700">
                 <button
-                  onClick={() => alert('PDF Audit Report exported.')}
-                  className="px-3.5 py-2 rounded-lg bg-dark-800 hover:bg-dark-700 text-neutral-200 text-xs font-semibold border border-dark-700 flex items-center gap-2 transition"
+                  onClick={() => exportPdfAuditReport(screeningResult)}
+                  className="px-3.5 py-2 rounded-lg bg-dark-800 hover:bg-dark-700 text-neutral-200 text-xs font-semibold border border-dark-700 flex items-center gap-2 transition cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5 text-neutral-300" />
-                  <span>Export Report</span>
+                  <span>Export Report (PDF)</span>
                 </button>
 
                 <button
                   onClick={handleReset}
-                  className="px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs transition flex items-center gap-2 shadow-none"
+                  className="px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs transition flex items-center gap-2 shadow-none cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Screen Another</span>
