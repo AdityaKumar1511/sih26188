@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-dark: #050505;
+  --surface-card: #121212;
+}
+
+body {
+  background-color: #050505;
+  color: #f5f5f5;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Matte Black & Orange card container */
+.matte-card {
+  background-color: #121212;
+  border: 1px solid #262626;
+  border-radius: 0.75rem;
+}
+
+.matte-card-hover {
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.matte-card-hover:hover {
+  border-color: #f97316;
+  background-color: #171717;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #050505;
+}
+::-webkit-scrollbar-thumb {
+  background: #262626;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ea580c;
+}
