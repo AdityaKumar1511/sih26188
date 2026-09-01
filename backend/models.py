@@ -47,6 +47,41 @@ class QrVerificationResult(BaseModel):
     extracted_qr_data: Optional[Dict[str, Any]] = None
 
 
+class BiometricVerificationResult(BaseModel):
+    is_match: bool
+    match_score: int = Field(..., ge=0, le=100, description="Biometric Match Confidence 0-100")
+    cosine_similarity: float
+    l2_distance: Optional[float] = None
+    liveness_score: int = Field(..., ge=0, le=100)
+    liveness_status: str = Field(..., description="GENUINE_LIVE_PERSON | SUSPICIOUS_PRESENTATION | SPOOF_ATTACK_DETECTED | SKIPPED")
+    is_live_person: bool
+    verdict: str = Field(..., description="MATCH_VERIFIED | IMPERSONATION_DETECTED | LIVENESS_FAILED | NO_FACE_DETECTED")
+    verdict_description: str
+    doc_face_crop_base64: Optional[str] = None
+    live_face_crop_base64: Optional[str] = None
+    doc_face_confidence: Optional[float] = None
+    live_face_confidence: Optional[float] = None
+
+
+class BiometricMatchResponse(BaseModel):
+    success: bool
+    verdict: str
+    is_match: bool
+    match_score: int
+    cosine_similarity: float
+    l2_distance: Optional[float] = None
+    liveness_score: int
+    liveness_status: str
+    is_live_person: bool
+    verdict_description: str
+    doc_face_crop_base64: Optional[str] = None
+    live_face_crop_base64: Optional[str] = None
+    doc_face_confidence: Optional[float] = None
+    live_face_confidence: Optional[float] = None
+    forensic_trace: List[str]
+    processing_time_ms: float
+
+
 class ExtractAndValidateResponse(BaseModel):
     success: bool
     document_type: str
@@ -57,6 +92,7 @@ class ExtractAndValidateResponse(BaseModel):
     checksum_result: ChecksumResult
     cross_check_result: CrossCheckResult
     qr_verification: Optional[QrVerificationResult] = None
+    biometric_verification: Optional[BiometricVerificationResult] = None
     extracted_fields: List[ExtractedFieldItem]
     validation_checks: List[ValidationCheckItem]
     forensic_trace: List[str]

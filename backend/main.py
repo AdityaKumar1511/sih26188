@@ -6,21 +6,24 @@ Smart India Hackathon (SIH PS 26188 - Ministry of Home Affairs)
 import time
 import io
 import logging
-from typing import Dict, Any, List
-from fastapi import FastAPI, UploadFile, File, HTTPException, status
+from typing import Dict, Any, List, Optional
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from PIL import Image
 
 from validators import validate_aadhaar_number, validate_pan_number, validate_passport_number, parse_mrz_td3
 from ocr import perform_ocr, parse_document_fields
 from db import cross_check_record
+from face_matcher import match_faces_1to1
 from models import (
     ExtractAndValidateResponse,
     ExtractedFieldItem,
     ChecksumResult,
     CrossCheckResult,
     ValidationCheckItem,
+    BiometricVerificationResult,
+    BiometricMatchResponse,
     ErrorResponse
 )
 
@@ -28,9 +31,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="MHA AI Document Screening API",
-    description="SIH PS 26188: Automated Identity Document Extraction & Forensic Verification Engine",
-    version="1.0.0"
+    title="MHA AI Document Screening & Biometric Verification API",
+    description="SIH PS 26188: Automated Identity Document Extraction, Algorithmic Validation, ELA Forensics & 1:1 Live Biometric Face Matching",
+    version="1.1.0"
 )
 
 # Enable CORS for Next.js frontend integration
@@ -47,9 +50,9 @@ app.add_middleware(
 async def root():
     return {
         "status": "online",
-        "service": "AI Document Screening API (PS26188)",
-        "version": "1.0.0",
-        "endpoints": ["/extract-and-validate", "/health", "/docs"]
+        "service": "AI Document Screening & Biometric API (PS26188)",
+        "version": "1.1.0",
+        "endpoints": ["/extract-and-validate", "/match-face", "/generate-audit-report", "/health", "/docs"]
     }
 
 
@@ -58,17 +61,80 @@ async def health_check():
     return {"status": "healthy", "timestamp": time.time()}
 
 
+@app.post("/match-face", response_model=BiometricMatchResponse)
+@app.post("/match-face/", response_model=BiometricMatchResponse)
+async def match_face_endpoint(
+    document_image: UploadFile = File(..., description="Scanned Document or Passport Image"),
+    live_face_image: UploadFile = File(..., description="Live Passenger Camera Snapshot")
+):
+    """
+    Dedicated 1:1 Live Biometric Face Matching Endpoint:
+    1. Ingests Document Scan and Live Passenger Camera snapshot.
+    2. Detects facial bounding box and extracts passenger portrait from document.
+    3. Detects face and evaluates passive anti-spoofing / liveness on live camera frame.
+    4. Computes 128-D Deep Feature Embeddings via SFace & Cosine distance metric.
+    5. Returns normalized face crops in Base64 for instant UI comparison and forensic verdict.
+    """
+    start_time = time.perf_counter()
+
+    try:
+        doc_bytes = await document_image.read()
+        live_bytes = await live_face_image.read()
+
+        if len(doc_bytes) == 0 or len(live_bytes) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="One or both uploaded image files are empty."
+            )
+
+        # Run 1:1 Biometric matching pipeline
+        result = match_faces_1to1(doc_bytes, live_bytes)
+        elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+        return BiometricMatchResponse(
+            success=result.get("success", False),
+            verdict=result.get("verdict", "ERROR"),
+            is_match=result.get("is_match", False),
+            match_score=result.get("match_score", 0),
+            cosine_similarity=result.get("cosine_similarity", 0.0),
+            l2_distance=result.get("l2_distance"),
+            liveness_score=result.get("liveness_score", 0),
+            liveness_status=result.get("liveness_status", "UNKNOWN"),
+            is_live_person=result.get("is_live_person", False),
+            verdict_description=result.get("verdict_description", ""),
+            doc_face_crop_base64=result.get("doc_face_crop_base64"),
+            live_face_crop_base64=result.get("live_face_crop_base64"),
+            doc_face_confidence=result.get("doc_face_confidence"),
+            live_face_confidence=result.get("live_face_confidence"),
+            forensic_trace=result.get("forensic_trace", []),
+            processing_time_ms=elapsed_ms
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Biometric matching failure: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Biometric face matching processing failed: {str(e)}"
+        )
+
+
 @app.post("/extract-and-validate", response_model=ExtractAndValidateResponse)
 @app.post("/extract-and-validate/", response_model=ExtractAndValidateResponse)
-async def extract_and_validate(file: UploadFile = File(...)):
+async def extract_and_validate(
+    file: UploadFile = File(...),
+    live_face: Optional[UploadFile] = File(None)
+):
     """
-    Main Endpoint:
-    1. Ingests uploaded image scan (Aadhaar or PAN format).
+    Main Screening & Verification Endpoint:
+    1. Ingests uploaded image scan (Aadhaar, PAN, Passport, DL).
     2. Executes OCR with OpenCV preprocessing.
     3. Extracts structured entity fields (Name, DOB, ID Number, Gender/Father).
-    4. Validates ID numbers algorithmically (Aadhaar 12-digit Verhoeff or PAN rules).
-    5. Cross-checks against the Supabase government registry.
-    6. Returns structured verdict, confidence scores, and forensic trace telemetry.
+    4. Validates ID numbers algorithmically (Aadhaar 12-digit Verhoeff, PAN, or Passport MRZ).
+    5. Runs Error Level Analysis (ELA) and Image Quality metrics.
+    6. Cross-checks against the Supabase government registry.
+    7. Optionally runs 1:1 Live Biometric Face Matching if passenger camera snapshot is supplied.
+    8. Returns structured verdict, confidence scores, and forensic trace telemetry.
     """
     start_time = time.perf_counter()
 
@@ -88,7 +154,6 @@ async def extract_and_validate(file: UploadFile = File(...)):
                 detail="Uploaded file is empty (0 bytes)."
             )
         
-        # Verify PIL can open the image
         img = Image.open(io.BytesIO(contents))
         img.verify()
     except HTTPException:
@@ -126,9 +191,6 @@ async def extract_and_validate(file: UploadFile = File(...)):
         f"Document classified as: {doc_type}."
     ]
 
-    if engine_used == "none" and not ocr_result.get("raw_text"):
-        forensic_trace.append("ALERT: Tesseract binary not found in system PATH. Run 'brew install tesseract' on macOS to enable live text recognition.")
-
     # 4. Algorithmic Checksum Validation
     checksum_passed = False
     checksum_details = "No valid document identifier detected for algorithmic check."
@@ -163,7 +225,6 @@ async def extract_and_validate(file: UploadFile = File(...)):
 
     elif doc_type == "PASSPORT" and id_number:
         checksum_algo = "Passport Syntax + ICAO 9303 MRZ Check Digits"
-        # Step 1: Syntax validation (1 letter + 7 digits)
         pp_res = validate_passport_number(id_number)
         checksum_passed = pp_res["checksum_passed"]
         if checksum_passed:
@@ -174,27 +235,18 @@ async def extract_and_validate(file: UploadFile = File(...)):
             checksum_error = pp_res.get("error")
             forensic_trace.append(f"CRITICAL: {checksum_details}")
 
-        # Step 2: MRZ ICAO 9303 check digit verification
         mrz_result = parsed_fields.get("mrz_result")
         if mrz_result:
             if mrz_result.get("valid"):
                 passed_count = sum(1 for v in mrz_result.get("check_digits", {}).values() if v.get("passed"))
                 checksum_details += f" MRZ verified: {passed_count}/4 ICAO check digits passed."
                 forensic_trace.append(f"MRZ ICAO 9303: All {passed_count} check digits PASSED.")
-                if mrz_result.get("full_name"):
-                    forensic_trace.append(f"MRZ decoded name: {mrz_result['full_name']}.")
-                if mrz_result.get("nationality"):
-                    forensic_trace.append(f"MRZ nationality: {mrz_result['nationality']}.")
             else:
                 checksum_passed = False
                 failed_checks = [k for k, v in mrz_result.get("check_digits", {}).items() if not v.get("passed")]
                 checksum_details += f" MRZ FAILED on: {', '.join(failed_checks)}."
                 checksum_error = mrz_result.get("details", "MRZ check digit failure.")
                 forensic_trace.append(f"CRITICAL: MRZ tampered — failed checks: {', '.join(failed_checks)}.")
-                for err in mrz_result.get("errors", []):
-                    forensic_trace.append(f"MRZ Error: {err}")
-        else:
-            forensic_trace.append("MRZ zone: Not detected or unreadable in OCR scan.")
     else:
         forensic_trace.append("WARNING: Unable to locate standard Aadhaar or PAN identifier number.")
 
@@ -244,7 +296,36 @@ async def extract_and_validate(file: UploadFile = File(...)):
         else:
             forensic_trace.append(f"Registry lookup: ID not found in {db_result['source']} (Unverified record).")
 
-    # 8. Build Extracted Fields List with Real Measured Confidences
+    # 8. Optional Live Biometric Face Matching (if live_face is provided)
+    biometric_verification_obj: Optional[BiometricVerificationResult] = None
+    biometric_score = 0
+    if live_face is not None:
+        try:
+            live_bytes = await live_face.read()
+            if len(live_bytes) > 0:
+                face_match_res = match_faces_1to1(contents, live_bytes)
+                if face_match_res.get("success"):
+                    biometric_score = face_match_res.get("match_score", 0)
+                    biometric_verification_obj = BiometricVerificationResult(
+                        is_match=face_match_res.get("is_match", False),
+                        match_score=face_match_res.get("match_score", 0),
+                        cosine_similarity=face_match_res.get("cosine_similarity", 0.0),
+                        l2_distance=face_match_res.get("l2_distance"),
+                        liveness_score=face_match_res.get("liveness_score", 0),
+                        liveness_status=face_match_res.get("liveness_status", "UNKNOWN"),
+                        is_live_person=face_match_res.get("is_live_person", False),
+                        verdict=face_match_res.get("verdict", "UNKNOWN"),
+                        verdict_description=face_match_res.get("verdict_description", ""),
+                        doc_face_crop_base64=face_match_res.get("doc_face_crop_base64"),
+                        live_face_crop_base64=face_match_res.get("live_face_crop_base64"),
+                        doc_face_confidence=face_match_res.get("doc_face_confidence"),
+                        live_face_confidence=face_match_res.get("live_face_confidence")
+                    )
+                    forensic_trace.append(f"Biometric Face Match: {face_match_res['verdict_description']}")
+        except Exception as e:
+            logger.warning(f"Live face verification encountered an error: {e}")
+
+    # 9. Build Extracted Fields List
     extracted_items: List[ExtractedFieldItem] = []
     
     if name:
@@ -300,15 +381,6 @@ async def extract_and_validate(file: UploadFile = File(...)):
                 confidence=confidences.get("place_of_birth", 80)
             ))
 
-        place_of_issue = parsed_fields.get("place_of_issue")
-        if place_of_issue:
-            extracted_items.append(ExtractedFieldItem(
-                field_name="Place of Issue",
-                value=place_of_issue,
-                status="verified",
-                confidence=confidences.get("place_of_issue", 80)
-            ))
-
         expiry_date = parsed_fields.get("expiry_date")
         if expiry_date:
             extracted_items.append(ExtractedFieldItem(
@@ -327,18 +399,6 @@ async def extract_and_validate(file: UploadFile = File(...)):
                 confidence=confidences.get("nationality", 90)
             ))
 
-        mrz_result = parsed_fields.get("mrz_result")
-        if mrz_result:
-            mrz_status = "VERIFIED" if mrz_result.get("valid") else "FAILED"
-            extracted_items.append(ExtractedFieldItem(
-                field_name="MRZ Zone (ICAO 9303)",
-                value=mrz_status,
-                status="verified" if mrz_result.get("valid") else "flagged",
-                confidence=95 if mrz_result.get("valid") else 30,
-                anomaly_details=mrz_result.get("details")
-            ))
-
-    # If no fields could be extracted at all
     if not extracted_items:
         extracted_items.append(ExtractedFieldItem(
             field_name="Scan Quality",
@@ -348,10 +408,9 @@ async def extract_and_validate(file: UploadFile = File(...)):
             anomaly_details="Could not parse recognized identity fields from scan."
         ))
 
-    # 9. Compute Real Dynamic Validation Checks across 6 Pillars
+    # 10. Compute Dynamic Validation Checks across Multi-Pillar Matrix
     validation_checks: List[ValidationCheckItem] = []
 
-    # Check 1: OCR Extraction Fidelity
     ocr_word_confs = [item.get("conf", 0) for item in ocr_result.get("ocr_data", []) if item.get("conf", 0) > 10]
     avg_ocr_conf = int(sum(ocr_word_confs) / max(1, len(ocr_word_confs))) if ocr_word_confs else (40 if not extracted_items else 75)
     
@@ -364,7 +423,6 @@ async def extract_and_validate(file: UploadFile = File(...)):
         score=avg_ocr_conf
     ))
 
-    # Check 2: Checksum (Algorithmic)
     chk_score = 100 if checksum_passed else (0 if id_number else 20)
     validation_checks.append(ValidationCheckItem(
         id="c2",
@@ -375,7 +433,6 @@ async def extract_and_validate(file: UploadFile = File(...)):
         score=chk_score
     ))
 
-    # Check 3: Digital QR Code Cross-Verification
     qr_score = qr_verify.get("score", 70)
     validation_checks.append(ValidationCheckItem(
         id="c3",
@@ -386,7 +443,6 @@ async def extract_and_validate(file: UploadFile = File(...)):
         score=qr_score
     ))
 
-    # Check 4: Digital Error Level Analysis (ELA Forensic Splicing)
     ela_score = ela_res.get("ela_score", 80)
     validation_checks.append(ValidationCheckItem(
         id="c4",
@@ -397,7 +453,6 @@ async def extract_and_validate(file: UploadFile = File(...)):
         score=ela_score
     ))
 
-    # Check 5: Image Sharpness & Substrate Focus
     sharp_score = sharp_res.get("sharpness_score", 75)
     validation_checks.append(ValidationCheckItem(
         id="c5",
@@ -408,7 +463,6 @@ async def extract_and_validate(file: UploadFile = File(...)):
         score=sharp_score
     ))
 
-    # Check 6: Government Registry Cross-check (0 if NOT_FOUND, 100 if ACTIVE)
     db_score = 100 if db_passed else (0 if db_result["status"] in ("REVOKED", "NOT_FOUND") else 50)
     validation_checks.append(ValidationCheckItem(
         id="c6",
@@ -419,53 +473,38 @@ async def extract_and_validate(file: UploadFile = File(...)):
         score=db_score
     ))
 
-    # Check 7 (Passport only): MRZ ICAO 9303 Check Digit Verification
-    mrz_score = 0
-    if doc_type == "PASSPORT":
-        mrz_data = parsed_fields.get("mrz_result")
-        if mrz_data:
-            cd = mrz_data.get("check_digits", {})
-            passed_count = sum(1 for v in cd.values() if v.get("passed"))
-            total_count = len(cd) if cd else 4
-            mrz_score = int((passed_count / max(total_count, 1)) * 100)
-            mrz_status_str = "pass" if mrz_data.get("valid") else "fail"
-            validation_checks.append(ValidationCheckItem(
-                id="c7",
-                name="MRZ ICAO 9303 Check Digits",
-                category="Algorithmic",
-                status=mrz_status_str,
-                details=mrz_data.get("details", "MRZ zone analyzed."),
-                score=mrz_score
-            ))
-        else:
-            validation_checks.append(ValidationCheckItem(
-                id="c7",
-                name="MRZ ICAO 9303 Check Digits",
-                category="Algorithmic",
-                status="warning",
-                details="MRZ zone not detected in OCR scan.",
-                score=50
-            ))
-            mrz_score = 50
+    # Check 7 (Biometric Check if provided)
+    if biometric_verification_obj is not None:
+        validation_checks.append(ValidationCheckItem(
+            id="c7_bio",
+            name="1:1 Live Biometric Face Verification",
+            category="Biometric",
+            status="pass" if biometric_verification_obj.is_match else "fail",
+            details=biometric_verification_obj.verdict_description,
+            score=biometric_verification_obj.match_score
+        ))
 
     # Weighted composite Authenticity Score (0-100)
-    if doc_type == "PASSPORT":
-        # Passport: OCR 10%, Syntax 15%, QR 5%, ELA 15%, Sharpness 10%, Registry 20%, MRZ 25%
-        weights = [0.10, 0.15, 0.05, 0.15, 0.10, 0.20, 0.25]
-        scores = [avg_ocr_conf, chk_score, qr_score, ela_score, sharp_score, db_score, mrz_score]
+    if biometric_verification_obj is not None:
+        # With Biometric: OCR 10%, Checksum 20%, QR 10%, ELA 15%, Sharpness 5%, Registry 15%, Biometrics 25%
+        weights = [0.10, 0.20, 0.10, 0.15, 0.05, 0.15, 0.25]
+        scores = [avg_ocr_conf, chk_score, qr_score, ela_score, sharp_score, db_score, biometric_score]
     else:
-        # Aadhaar/PAN: OCR 15%, Checksum 25%, QR 15%, ELA 15%, Sharpness 10%, Registry 20%
         weights = [0.15, 0.25, 0.15, 0.15, 0.10, 0.20]
         scores = [avg_ocr_conf, chk_score, qr_score, ela_score, sharp_score, db_score]
+
     authenticity_score = int(sum(w * s for w, s in zip(weights, scores)))
 
-    # Compute Strict Real-World Verdict
+    # Verdict Logic
     if (not checksum_passed and id_number) or qr_verify.get("qr_status") == "TAMPERED":
         verdict = "TAMPERED"
         authenticity_score = min(authenticity_score, 35)
     elif db_result["status"] == "REVOKED" or ela_res.get("is_tampered_by_ela"):
         verdict = "TAMPERED"
         authenticity_score = min(authenticity_score, 35)
+    elif biometric_verification_obj is not None and not biometric_verification_obj.is_match:
+        verdict = "TAMPERED"
+        authenticity_score = min(authenticity_score, 30)
     elif db_passed and checksum_passed and authenticity_score >= 80:
         verdict = "AUTHENTIC"
     else:
@@ -501,6 +540,7 @@ async def extract_and_validate(file: UploadFile = File(...)):
             "raw_payload_preview": qr_res.get("raw_payload"),
             "extracted_qr_data": qr_res.get("parsed_data")
         },
+        biometric_verification=biometric_verification_obj,
         extracted_fields=extracted_items,
         validation_checks=validation_checks,
         forensic_trace=forensic_trace,
@@ -516,7 +556,6 @@ async def generate_audit_report_endpoint(screening_data: Dict[str, Any]):
     """
     try:
         from report_generator import generate_pdf_report
-        from fastapi.responses import Response
         pdf_bytes = generate_pdf_report(screening_data)
         return Response(
             content=pdf_bytes,

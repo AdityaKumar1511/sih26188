@@ -25,11 +25,9 @@ except ImportError:
 def _escape_pdf_text(text: str) -> str:
     """Escapes special PDF characters and strips non-latin1 unicode."""
     t = str(text)
-    # Replace common unicode chars with ASCII equivalents
     t = t.replace('\u2022', '-').replace('\u2019', "'").replace('\u2018', "'")
     t = t.replace('\u201c', '"').replace('\u201d', '"').replace('\u2013', '-').replace('\u2014', '--')
     t = t.replace('\u00a0', ' ').replace('\u2026', '...')
-    # Strip anything else that can't be encoded as latin-1
     t = t.encode('latin-1', errors='replace').decode('latin-1')
     return t.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)')
 
@@ -44,13 +42,13 @@ def _build_raw_pdf_certificate(data: Dict[str, Any]) -> bytes:
     verdict = data.get("verdict", "SUSPICIOUS")
     score = data.get("authenticity_score", 0)
     doc_type = data.get("document_type", "UNKNOWN")
+    bio_data = data.get("biometric_verification")
 
-    # Construct PDF Stream commands
     stream = []
     
-    # 1. Background header bar (Dark Navy / Black)
-    stream.append("0.05 0.08 0.14 rg")  # RGB Fill
-    stream.append("36 710 540 70 re f")  # Rectangle
+    # 1. Background header bar
+    stream.append("0.05 0.08 0.14 rg")
+    stream.append("36 710 540 70 re f")
     
     # Orange Accent Line
     stream.append("0.92 0.35 0.05 rg")
@@ -58,17 +56,17 @@ def _build_raw_pdf_certificate(data: Dict[str, Any]) -> bytes:
 
     # Header Text
     stream.append("BT")
-    stream.append("/F2 9 Tf 0.92 0.35 0.05 rg") # Orange Subtitle
+    stream.append("/F2 9 Tf 0.92 0.35 0.05 rg")
     stream.append("200 760 Td (MINISTRY OF HOME AFFAIRS  -  GOVERNMENT OF INDIA) Tj")
     stream.append("ET")
 
     stream.append("BT")
-    stream.append("/F2 14 Tf 1.0 1.0 1.0 rg") # White Title
+    stream.append("/F2 14 Tf 1.0 1.0 1.0 rg")
     stream.append("120 740 Td (AI Fake Identity & Document Screening System) Tj")
     stream.append("ET")
 
     stream.append("BT")
-    stream.append("/F1 8 Tf 0.7 0.75 0.8 rg") # Metadata
+    stream.append("/F1 8 Tf 0.7 0.75 0.8 rg")
     stream.append(f"140 722 Td (Certificate Ref: {report_id}  |  Generated: {timestamp_str}) Tj")
     stream.append("ET")
 
@@ -103,7 +101,7 @@ def _build_raw_pdf_certificate(data: Dict[str, Any]) -> bytes:
     # Verdict Text
     stream.append(f"BT /F2 12 Tf {badge_color} 120 668 Td ({_escape_pdf_text(badge_text)}) Tj ET")
     stream.append(f"BT /F1 9 Tf 0.1 0.15 0.2 rg 120 652 Td (Document Classification: {_escape_pdf_text(doc_type)}  |  Confidence: {score}%) Tj ET")
-    stream.append(f"BT /F1 8 Tf 0.3 0.35 0.4 rg 120 638 Td (Screening Engine: v4.2-Forensic  |  Status: Analysis Concluded) Tj ET")
+    stream.append(f"BT /F1 8 Tf 0.3 0.35 0.4 rg 120 638 Td (Screening Engine: v4.3-Forensic+Biometric  |  Status: Analysis Concluded) Tj ET")
 
     # 3. Section 1: Extracted Demographic Fields Table
     stream.append("BT /F2 10 Tf 0.05 0.08 0.14 rg 36 600 Td (1. Extracted Identity Fields (OCR & Layout Analytics)) Tj ET")
@@ -112,7 +110,7 @@ def _build_raw_pdf_certificate(data: Dict[str, Any]) -> bytes:
 
     curr_y = 560
     fields = data.get("extracted_fields", [])
-    for idx, f in enumerate(fields[:6]):
+    for idx, f in enumerate(fields[:5]):
         bg = "0.97 0.98 0.99 rg" if idx % 2 == 0 else "1.0 1.0 1.0 rg"
         stream.append(f"{bg} 36 {curr_y - 4} 540 18 re f")
         stream.append(f"0.85 0.88 0.92 RG 0.5 w 36 {curr_y - 4} 540 18 re S")
@@ -130,16 +128,34 @@ def _build_raw_pdf_certificate(data: Dict[str, Any]) -> bytes:
         stream.append(f"BT /F1 8.5 Tf 0.3 0.35 0.4 rg 480 {curr_y} Td ({f_conf}) Tj ET")
         curr_y -= 18
 
-    # 4. Section 2: Forensic Matrix
-    curr_y -= 14
-    stream.append(f"BT /F2 10 Tf 0.05 0.08 0.14 rg 36 {curr_y} Td (2. Multi-Pillar Forensic Verification Matrix) Tj ET")
+    # 4. Section 2: Biometric Face Verification (if present)
+    if bio_data:
+        curr_y -= 10
+        stream.append(f"BT /F2 10 Tf 0.05 0.08 0.14 rg 36 {curr_y} Td (2. 1:1 Live Biometric Face Matching & Anti-Spoofing) Tj ET")
+        curr_y -= 16
+        stream.append(f"0.95 0.97 1.0 rg 36 {curr_y - 30} 540 34 re f")
+        stream.append(f"0.7 0.8 0.95 RG 0.5 w 36 {curr_y - 30} 540 34 re S")
+
+        b_score = bio_data.get("match_score", 0)
+        b_verdict = _escape_pdf_text(bio_data.get("verdict", "UNKNOWN"))
+        b_live = _escape_pdf_text(bio_data.get("liveness_status", "UNKNOWN"))
+        b_desc = _escape_pdf_text(bio_data.get("verdict_description", "")[:80])
+
+        stream.append(f"BT /F2 8.5 Tf 0.1 0.2 0.4 rg 45 {curr_y - 6} Td (Match Score: {b_score}% | Status: {b_verdict} | Liveness: {b_live}) Tj ET")
+        stream.append(f"BT /F1 8 Tf 0.3 0.35 0.4 rg 45 {curr_y - 20} Td ({b_desc}) Tj ET")
+        curr_y -= 38
+
+    # 5. Section 3: Forensic Matrix
+    curr_y -= 10
+    sec_num = "3" if bio_data else "2"
+    stream.append(f"BT /F2 10 Tf 0.05 0.08 0.14 rg 36 {curr_y} Td ({sec_num}. Multi-Pillar Forensic Verification Matrix) Tj ET")
     curr_y -= 18
     stream.append(f"0.05 0.08 0.14 rg 36 {curr_y} 540 16 re f")
     stream.append(f"BT /F2 8 Tf 1 1 1 rg 45 {curr_y + 4} Td (PILLAR / VALIDATION CHECK) Tj 240 {curr_y + 4} Td (RESULT) Tj 310 {curr_y + 4} Td (SCORE) Tj 380 {curr_y + 4} Td (METRIC DETAILS) Tj ET")
     curr_y -= 16
 
     checks = data.get("validation_checks", [])
-    for idx, c in enumerate(checks[:6]):
+    for idx, c in enumerate(checks[:5]):
         bg = "0.97 0.98 0.99 rg" if idx % 2 == 0 else "1.0 1.0 1.0 rg"
         stream.append(f"{bg} 36 {curr_y - 4} 540 18 re f")
         stream.append(f"0.85 0.88 0.92 RG 0.5 w 36 {curr_y - 4} 540 18 re S")
@@ -157,52 +173,23 @@ def _build_raw_pdf_certificate(data: Dict[str, Any]) -> bytes:
         stream.append(f"BT /F1 7.5 Tf 0.35 0.4 0.45 rg 380 {curr_y} Td ({c_details}) Tj ET")
         curr_y -= 18
 
-    # 5. Section 3: Telemetry Log
-    curr_y -= 14
-    stream.append(f"BT /F2 10 Tf 0.05 0.08 0.14 rg 36 {curr_y} Td (3. Forensic Audit Telemetry Trace) Tj ET")
-    curr_y -= 14
-    stream.append(f"0.94 0.96 0.98 rg 36 {curr_y - 42} 540 46 re f")
-    stream.append(f"0.8 0.84 0.9 RG 0.5 w 36 {curr_y - 42} 540 46 re S")
-
-    traces = data.get("forensic_trace", [])
-    trace_y = curr_y - 10
-    for t in traces[:3]:
-        t_clean = _escape_pdf_text(f"> {t[:80]}")
-        stream.append(f"BT /F1 7.5 Tf 0.2 0.25 0.3 rg 44 {trace_y} Td ({t_clean}) Tj ET")
-        trace_y -= 12
-
     # 6. Official Footer
     stream.append("0.85 0.88 0.92 RG 1 w 36 50 540 0 re S")
     stream.append("BT /F1 7.5 Tf 0.4 0.45 0.5 rg 110 38 Td (CONFIDENTIAL - MINISTRY OF HOME AFFAIRS (MHA) AI SCREENING PLATFORM PS26188) Tj ET")
     stream.append("BT /F1 7 Tf 0.55 0.6 0.65 rg 180 26 Td (Automated certificate for law enforcement and border screening verification.) Tj ET")
 
     stream_content = "\n".join(stream)
-    # Safety: ensure no non-latin1 chars sneak through
     stream_bytes = stream_content.encode('latin-1', errors='replace')
     stream_len = len(stream_bytes)
 
-    # Assemble raw PDF objects
     objects = []
-    
-    # 1: Catalog
     objects.append("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj")
-    
-    # 2: Pages
     objects.append("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj")
-    
-    # 3: Page (Letter 612 x 792)
     objects.append("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>\nendobj")
-    
-    # 4: Stream
     objects.append(f"4 0 obj\n<< /Length {stream_len} >>\nstream\n{stream_content}\nendstream\nendobj")
-    
-    # 5: Font F1 (Helvetica)
     objects.append("5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj")
-    
-    # 6: Font F2 (Helvetica-Bold)
     objects.append("6 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj")
 
-    # Compute xref table
     pdf_output = ["%PDF-1.4\n"]
     offsets = []
     
@@ -266,9 +253,6 @@ def generate_pdf_report(screening_data: Dict[str, Any]) -> bytes:
         table_header_style = ParagraphStyle(
             'TableHeader', parent=styles['Normal'], fontSize=8, leading=9.5, textColor=colors.white, fontName='Helvetica-Bold'
         )
-        code_style = ParagraphStyle(
-            'CodeStyle', parent=styles['Normal'], fontSize=7, leading=9, textColor=colors.HexColor('#334155'), fontName='Courier'
-        )
 
         story = []
         story.append(Paragraph("MINISTRY OF HOME AFFAIRS (MHA)", subtitle_style))
@@ -278,7 +262,7 @@ def generate_pdf_report(screening_data: Dict[str, Any]) -> bytes:
         
         report_id = f"MHA-AUDIT-{str(uuid.uuid4())[:8].upper()}"
         timestamp_str = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
-        story.append(Paragraph(f"Ref: <b>{report_id}</b> | Generated: <b>{timestamp_str}</b> | Engine: <b>v4.2-Forensic</b>", meta_style))
+        story.append(Paragraph(f"Ref: <b>{report_id}</b> | Generated: <b>{timestamp_str}</b> | Engine: <b>v4.3-Forensic+Biometrics</b>", meta_style))
         story.append(Spacer(1, 6))
         story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#ea580c'), spaceBefore=0, spaceAfter=6))
 
@@ -315,8 +299,25 @@ def generate_pdf_report(screening_data: Dict[str, Any]) -> bytes:
         story.append(f_table)
         story.append(Spacer(1, 8))
 
+        # Biometric Section (if present)
+        bio = screening_data.get("biometric_verification")
+        if bio:
+            story.append(Paragraph("2. 1:1 Live Biometric Face Matching & Anti-Spoofing", section_heading))
+            bio_st = "MATCH VERIFIED" if bio.get("is_match") else "IMPERSONATION DETECTED"
+            bio_col = "#16a34a" if bio.get("is_match") else "#dc2626"
+            bio_html = f"<b>Biometric Result:</b> <font color='{bio_col}'><b>{bio_st}</b></font> &nbsp;|&nbsp; <b>Similarity Score:</b> {bio.get('match_score', 0)}% &nbsp;|&nbsp; <b>Liveness:</b> {bio.get('liveness_status', 'UNKNOWN')}<br/><font size='7.5' color='#64748b'>{bio.get('verdict_description', '')}</font>"
+            b_table = Table([[Paragraph(bio_html, body_style)]], colWidths=[540])
+            b_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8fafc')),
+                ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#cbd5e1')),
+                ('PADDING', (0,0), (-1,-1), 6)
+            ]))
+            story.append(b_table)
+            story.append(Spacer(1, 8))
+
         # Checks Table
-        story.append(Paragraph("2. Multi-Pillar Forensic Matrix", section_heading))
+        sec_num = "3" if bio else "2"
+        story.append(Paragraph(f"{sec_num}. Multi-Pillar Forensic Matrix", section_heading))
         chk_rows = [[Paragraph("Check Name", table_header_style), Paragraph("Category", table_header_style), Paragraph("Result", table_header_style), Paragraph("Score", table_header_style), Paragraph("Details", table_header_style)]]
         for c in screening_data.get("validation_checks", []):
             c_st = c.get("status", "fail").upper()
@@ -334,5 +335,4 @@ def generate_pdf_report(screening_data: Dict[str, Any]) -> bytes:
         buffer.seek(0)
         return buffer.getvalue()
     except Exception:
-        # Fallback to standalone zero-dependency builder if reportlab hits an error
         return _build_raw_pdf_certificate(screening_data)

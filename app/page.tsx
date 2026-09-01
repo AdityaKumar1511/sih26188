@@ -16,9 +16,18 @@ import {
   Scan,
   Cpu,
   Building2,
+  ChevronRight,
   Download,
   Check,
-  X
+  X,
+  Camera,
+  CameraOff,
+  UserCheck,
+  UserX,
+  Radio,
+  Sparkles,
+  Layers,
+  ArrowRightLeft
 } from 'lucide-react';
 
 // ============================================================================
@@ -26,6 +35,7 @@ import {
 // ============================================================================
 
 type AppState = 'upload' | 'processing' | 'results';
+type AppMode = 'standard' | 'egate_kiosk';
 
 interface BoundingBox {
   id: string;
@@ -50,10 +60,23 @@ interface ExtractedField {
 interface ValidationCheck {
   id: string;
   name: string;
-  category: 'Structural' | 'Algorithmic' | 'Forensic' | 'Typography' | 'Biometric';
+  category: 'Structural' | 'Algorithmic' | 'Forensic' | 'Typography' | 'Biometric' | 'Registry';
   status: 'pass' | 'fail' | 'warning';
   details: string;
   score: number;
+}
+
+interface BiometricResult {
+  isMatch: boolean;
+  matchScore: number;
+  cosineSimilarity: number;
+  livenessScore: number;
+  livenessStatus: 'GENUINE_LIVE_PERSON' | 'SUSPICIOUS_PRESENTATION' | 'SPOOF_ATTACK_DETECTED' | 'SKIPPED';
+  isLivePerson: boolean;
+  verdict: string;
+  verdictDescription: string;
+  docFaceCropBase64?: string;
+  liveFaceCropBase64?: string;
 }
 
 interface ScreeningResult {
@@ -67,69 +90,255 @@ interface ScreeningResult {
   extractedFields: ExtractedField[];
   validationChecks: ValidationCheck[];
   forensicTrace: string[];
+  biometricResult?: BiometricResult;
 }
 
-const MOCK_TAMPERED_RESULT: ScreeningResult = {
-  authenticityScore: 34,
-  verdict: 'TAMPERED',
-  verdictDescription: 'Tampering Detected. Image splicing found in Date of Birth and Photo regions.',
-  processingTimeMs: 2210,
-  documentType: 'Permanent Account Number (PAN)',
-  confidence: 0.94,
-  boundingBoxes: [
-    {
-      id: 'b1',
-      label: 'Altered Date of Birth',
-      type: 'critical',
-      x: 32,
-      y: 46,
-      width: 36,
-      height: 14,
-      description: 'Font family mismatch. Inconsistent pixel noise compression (ELA spike).',
-      confidence: 0.96
-    },
-    {
-      id: 'b2',
-      label: 'Photo Boundary Splice',
-      type: 'critical',
-      x: 12,
-      y: 35,
-      width: 24,
-      height: 38,
-      description: 'Edge dissimilarity index > 0.42. Photo pasted over original card background.',
-      confidence: 0.91
+interface SamplePreset {
+  id: string;
+  name: string;
+  docType: string;
+  description: string;
+  badgeText: string;
+  badgeStyle: 'success' | 'danger';
+  previewUrl: string;
+  liveFaceUrl: string;
+  mockResult: ScreeningResult;
+}
+
+// ============================================================================
+// SAMPLE PRESETS (WITH LIVE BIOMETRIC PAIRS)
+// ============================================================================
+
+const SAMPLE_PRESETS: SamplePreset[] = [
+  {
+    id: 'aadhaar-legit',
+    name: 'Sample 1: Legitimate Aadhaar + Real Passenger',
+    docType: 'Aadhaar Card',
+    description: 'Valid UIDAI Verhoeff checksum & 96% 1:1 Live Biometric Facial Match.',
+    badgeText: 'Verified (96%)',
+    badgeStyle: 'success',
+    previewUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80',
+    liveFaceUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80',
+    mockResult: {
+      authenticityScore: 96,
+      verdict: 'AUTHENTIC',
+      verdictDescription: 'Verified Authentic. Biometric facial embeddings match document portrait and Verhoeff checksum valid.',
+      processingTimeMs: 1840,
+      documentType: 'Aadhaar Card (UIDAI Standard)',
+      confidence: 0.98,
+      boundingBoxes: [
+        {
+          id: 'b1',
+          label: 'UIDAI Emblem & Seal',
+          type: 'info',
+          x: 10,
+          y: 12,
+          width: 20,
+          height: 18,
+          description: 'Official emblem alignment and micro-text pattern verified.',
+          confidence: 0.99
+        },
+        {
+          id: 'b2',
+          label: 'Passenger Face Match',
+          type: 'info',
+          x: 70,
+          y: 35,
+          width: 24,
+          height: 38,
+          description: 'Deep 128-D SFace biometric embedding matched with 96% confidence.',
+          confidence: 0.96
+        }
+      ],
+      extractedFields: [
+        { fieldName: 'Full Name', value: 'RAJESH KUMAR SHARMA', status: 'verified', confidence: 99 },
+        { fieldName: 'Aadhaar Number', value: '5489 2104 9811', status: 'verified', confidence: 98 },
+        { fieldName: 'Date of Birth', value: '14/08/1988', status: 'verified', confidence: 97 },
+        { fieldName: 'Gender', value: 'MALE', status: 'verified', confidence: 99 },
+        { fieldName: 'Address', value: 'H-42, Sector 62, Noida, Uttar Pradesh 201301', status: 'verified', confidence: 95 }
+      ],
+      validationChecks: [
+        { id: 'c1', name: 'Document Layout & OCR Extraction', category: 'Structural', status: 'pass', details: 'Template dimensions match standard UIDAI spec v3.2', score: 98 },
+        { id: 'c2', name: 'Verhoeff Checksum Algorithm', category: 'Algorithmic', status: 'pass', details: 'Aadhaar 12-digit Verhoeff checksum valid', score: 100 },
+        { id: 'c3', name: '1:1 Live Biometric Face Matching', category: 'Biometric', status: 'pass', details: 'Cosine metric 0.684. Passenger live face matches document portrait.', score: 96 },
+        { id: 'c4', name: 'Passive Liveness & Anti-Spoofing', category: 'Biometric', status: 'pass', details: 'Natural human skin chrominance and high-frequency texture verified.', score: 94 },
+        { id: 'c5', name: 'Error Level Analysis (ELA Splicing)', category: 'Forensic', status: 'pass', details: 'Uniform JPEG compression map across document canvas', score: 95 },
+        { id: 'c6', name: 'Government Registry Confirmation', category: 'Registry', status: 'pass', details: 'UIDAI Active Registry record match confirmed', score: 100 }
+      ],
+      biometricResult: {
+        isMatch: true,
+        matchScore: 96,
+        cosineSimilarity: 0.684,
+        livenessScore: 94,
+        livenessStatus: 'GENUINE_LIVE_PERSON',
+        isLivePerson: true,
+        verdict: 'MATCH_VERIFIED',
+        verdictDescription: 'Identity Confirmed: Passenger live face matches document portrait (96% confidence).'
+      },
+      forensicTrace: [
+        'Biometric 128-D facial vector cosine similarity: 0.684 (Match Verified).',
+        'Passive anti-spoofing test passed: Genuine live human verified.',
+        'Verhoeff check digit passed (UIDAI spec v3.2).',
+        'No pixel manipulation detected around Date of Birth field.',
+        'Registry match confirmed via in-memory-mock (Status: ACTIVE).'
+      ]
     }
-  ],
-  extractedFields: [
-    { fieldName: 'Full Name', value: 'VIKRAM SINGH MEHTA', status: 'verified', confidence: 96 },
-    { fieldName: 'PAN Number', value: 'ABCDE1234F', status: 'verified', confidence: 95 },
-    { fieldName: 'Father\'s Name', value: 'HARISH CHANDRA MEHTA', status: 'verified', confidence: 93 },
-    { fieldName: 'Date of Birth', value: '01/01/1995', status: 'flagged', confidence: 42, anomalyDetails: 'Font mismatch. Original scan raster: 12/05/1982' },
-    { fieldName: 'Issue Status', value: 'Active in NSDL Registry', status: 'warning', confidence: 88 }
-  ],
-  validationChecks: [
-    { id: 'c1', name: 'Format & Layout Alignment', category: 'Structural', status: 'pass', details: 'Card dimensions match 85.6mm x 53.98mm CR80 spec', score: 90 },
-    { id: 'c2', name: 'PAN Modulo-26 Check Digit', category: 'Algorithmic', status: 'pass', details: '5th character "E" matches surname letter correctly', score: 98 },
-    { id: 'c3', name: 'Error Level Analysis (ELA)', category: 'Forensic', status: 'fail', details: 'Severe ELA compression variance around Date of Birth text block', score: 18 },
-    { id: 'c4', name: 'Typography & Font Consistency', category: 'Typography', status: 'fail', details: 'DOB font renders Arial instead of Income Tax OCR-B font', score: 25 },
-    { id: 'c5', name: 'Facial Boundary Integrity', category: 'Biometric', status: 'fail', details: 'Color gradient discontinuity around photo margin', score: 32 }
-  ],
-  forensicTrace: [
-    'CRITICAL: Digital patch detected on Date of Birth digits.',
-    'Headshot replacement detected using Laplacian edge analysis.',
-    'Card background pattern broken around photo frame.'
-  ]
-};
+  },
+  {
+    id: 'pan-impersonator',
+    name: 'Sample 2: Stolen PAN + Impersonator Passenger',
+    docType: 'PAN Card',
+    description: 'Tampered DOB & Impersonator detected: Passenger face does not match card photo.',
+    badgeText: 'Impersonation (24%)',
+    badgeStyle: 'danger',
+    previewUrl: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=800&q=80',
+    liveFaceUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=600&q=80',
+    mockResult: {
+      authenticityScore: 24,
+      verdict: 'TAMPERED',
+      verdictDescription: 'CRITICAL ALERT: Biometric Mismatch & Splicing Detected. Live passenger is an impersonator carrying another person’s card.',
+      processingTimeMs: 2210,
+      documentType: 'Permanent Account Number (PAN)',
+      confidence: 0.94,
+      boundingBoxes: [
+        {
+          id: 'b1',
+          label: 'Biometric Face Mismatch',
+          type: 'critical',
+          x: 12,
+          y: 35,
+          width: 24,
+          height: 38,
+          description: 'CRITICAL: Facial similarity 24%. Live traveler does not match the portrait on document.',
+          confidence: 0.98
+        },
+        {
+          id: 'b2',
+          label: 'Altered Date of Birth',
+          type: 'critical',
+          x: 32,
+          y: 46,
+          width: 36,
+          height: 14,
+          description: 'Font family mismatch. Inconsistent pixel noise compression (ELA spike).',
+          confidence: 0.96
+        }
+      ],
+      extractedFields: [
+        { fieldName: 'Full Name', value: 'VIKRAM SINGH MEHTA', status: 'verified', confidence: 96 },
+        { fieldName: 'PAN Number', value: 'ABCPE1234F', status: 'verified', confidence: 95 },
+        { fieldName: 'Father\'s Name', value: 'HARISH CHANDRA MEHTA', status: 'verified', confidence: 93 },
+        { fieldName: 'Date of Birth', value: '01/01/1995', status: 'flagged', confidence: 42, anomalyDetails: 'Font mismatch. Original scan raster: 12/05/1982' },
+        { fieldName: 'Biometric Status', value: 'IMPERSONATION DETECTED', status: 'flagged', confidence: 24, anomalyDetails: 'Face does not match live traveler' }
+      ],
+      validationChecks: [
+        { id: 'c1', name: 'Document Layout & OCR Extraction', category: 'Structural', status: 'pass', details: 'Card dimensions match 85.6mm x 53.98mm CR80 spec', score: 90 },
+        { id: 'c2', name: '1:1 Live Biometric Face Matching', category: 'Biometric', status: 'fail', details: 'CRITICAL: Biometric similarity 24%. Live passenger does not match card photo.', score: 24 },
+        { id: 'c3', name: 'Passive Liveness & Anti-Spoofing', category: 'Biometric', status: 'pass', details: 'Live person present, but facial features do not match credentials.', score: 88 },
+        { id: 'c4', name: 'Error Level Analysis (ELA Splicing)', category: 'Forensic', status: 'fail', details: 'Severe ELA compression variance around Date of Birth text block', score: 18 },
+        { id: 'c5', name: 'Government Registry Confirmation', category: 'Registry', status: 'pass', details: 'ID exists in Registry but traveler identity is fraudulent', score: 80 }
+      ],
+      biometricResult: {
+        isMatch: false,
+        matchScore: 24,
+        cosineSimilarity: 0.112,
+        livenessScore: 88,
+        livenessStatus: 'GENUINE_LIVE_PERSON',
+        isLivePerson: true,
+        verdict: 'IMPERSONATION_DETECTED',
+        verdictDescription: 'CRITICAL: Biometric mismatch (24% similarity). High probability of identity impersonation or stolen document.'
+      },
+      forensicTrace: [
+        'CRITICAL: 1:1 Biometric matching failed (Cosine 0.112 < 0.363 threshold).',
+        'ALERT: Impersonation detected at checkpoint.',
+        'Digital patch detected on Date of Birth digits.',
+        'DOB font renders Arial instead of Income Tax OCR-B font.'
+      ]
+    }
+  },
+  {
+    id: 'dl-spoof',
+    name: 'Sample 3: Fake DL + Photo Spoof Attack',
+    docType: 'Driving License',
+    description: 'Forged DL Number & Screen Photo Attack caught by Passive Liveness detector.',
+    badgeText: 'Spoof Attack (14%)',
+    badgeStyle: 'danger',
+    previewUrl: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=800&q=80',
+    liveFaceUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=600&q=80',
+    mockResult: {
+      authenticityScore: 14,
+      verdict: 'TAMPERED',
+      verdictDescription: 'Severe Forgery & Presentation Attack. Non-existent RTO series code and phone screen spoof attack detected.',
+      processingTimeMs: 2450,
+      documentType: 'Indian Driving License (State Transport)',
+      confidence: 0.97,
+      boundingBoxes: [
+        {
+          id: 'b1',
+          label: 'Anti-Spoofing Alert',
+          type: 'critical',
+          x: 15,
+          y: 20,
+          width: 60,
+          height: 30,
+          description: 'Periodic digital moiré artifacts detected (display screen re-capture).',
+          confidence: 0.99
+        }
+      ],
+      extractedFields: [
+        { fieldName: 'Full Name', value: 'AMIT PRAKASH', status: 'flagged', confidence: 55 },
+        { fieldName: 'DL Number', value: 'DL-0420210099999', status: 'flagged', confidence: 20, anomalyDetails: 'State RTO Code 0420 is non-existent' },
+        { fieldName: 'Liveness Verdict', value: 'SPOOF ATTACK DETECTED', status: 'flagged', confidence: 15, anomalyDetails: 'Phone screen presentation attack' }
+      ],
+      validationChecks: [
+        { id: 'c1', name: 'Document Layout & OCR Extraction', category: 'Structural', status: 'fail', details: 'RTO emblem alignment shifted by 4.2mm', score: 45 },
+        { id: 'c2', name: 'Parivahan Checksum Algorithm', category: 'Algorithmic', status: 'fail', details: 'RTO series code 0420 does not exist in Delhi RTO database', score: 0 },
+        { id: 'c3', name: 'Passive Liveness & Anti-Spoofing', category: 'Biometric', status: 'fail', details: 'CRITICAL: Screen moiré frequency and compressed gamut detected (Score: 28/100)', score: 28 },
+        { id: 'c4', name: 'Error Level Analysis (ELA)', category: 'Forensic', status: 'fail', details: 'Entire card canvas generated via digital graphics editor', score: 22 }
+      ],
+      biometricResult: {
+        isMatch: false,
+        matchScore: 32,
+        cosineSimilarity: 0.150,
+        livenessScore: 28,
+        livenessStatus: 'SPOOF_ATTACK_DETECTED',
+        isLivePerson: false,
+        verdict: 'LIVENESS_FAILED',
+        verdictDescription: 'Anti-Spoofing alert: Live capture flagged as a potential photo/screen presentation attack.'
+      },
+      forensicTrace: [
+        'CRITICAL: Passive liveness failed. Digital moiré frequencies detected.',
+        'Anti-spoofing alert: Screen presentation attack intercepted.',
+        'Non-standard RTO series code detected.',
+        'Document canvas exhibits digital tampering artifacts.'
+      ]
+    }
+  }
+];
 
 // ============================================================================
 // LIVE FASTAPI BACKEND INTEGRATION & PDF EXPORT
+// ============================================================================
+
 const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://sih26188-naq6.onrender.com';
 const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
 
-async function analyzeDocument(fileInput: File): Promise<ScreeningResult> {
+async function analyzeDocumentWithBiometrics(
+  docFileInput: File | SamplePreset,
+  liveFaceInput: File | null
+): Promise<ScreeningResult> {
+  // If user selected one of the instant demo presets
+  if (typeof docFileInput === 'object' && 'mockResult' in docFileInput) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return docFileInput.mockResult;
+  }
+
   // Live File Upload -> Send to FastAPI Backend
   const formData = new FormData();
-  formData.append('file', fileInput);
+  formData.append('file', docFileInput as File);
+  if (liveFaceInput) {
+    formData.append('live_face', liveFaceInput);
+  }
 
   try {
     const response = await fetch(`${API_BASE_URL}/extract-and-validate`, {
@@ -144,7 +353,23 @@ async function analyzeDocument(fileInput: File): Promise<ScreeningResult> {
 
     const data = await response.json();
 
-    // Map FastAPI structured JSON to Frontend ScreeningResult
+    let biometricRes: BiometricResult | undefined = undefined;
+    if (data.biometric_verification) {
+      const b = data.biometric_verification;
+      biometricRes = {
+        isMatch: b.is_match,
+        matchScore: b.match_score,
+        cosineSimilarity: b.cosine_similarity,
+        livenessScore: b.liveness_score,
+        livenessStatus: b.liveness_status,
+        isLivePerson: b.is_live_person,
+        verdict: b.verdict,
+        verdictDescription: b.verdict_description,
+        docFaceCropBase64: b.doc_face_crop_base64,
+        liveFaceCropBase64: b.live_face_crop_base64
+      };
+    }
+
     return {
       authenticityScore: data.authenticity_score,
       verdict: data.verdict,
@@ -164,6 +389,17 @@ async function analyzeDocument(fileInput: File): Promise<ScreeningResult> {
           description: data.checksum_result.details,
           confidence: data.confidence
         },
+        ...(biometricRes ? [{
+          id: 'b_bio',
+          label: biometricRes.isMatch ? 'Verified Face Match' : 'Biometric Mismatch',
+          type: (biometricRes.isMatch ? 'info' : 'critical') as 'info' | 'critical',
+          x: 70,
+          y: 30,
+          width: 25,
+          height: 35,
+          description: biometricRes.verdictDescription,
+          confidence: biometricRes.matchScore / 100.0
+        }] : []),
         ...(data.qr_verification?.detected ? [{
           id: 'b2',
           label: data.qr_verification.status === 'VERIFIED' ? 'Verified QR Code' : 'Flagged QR Payload',
@@ -191,7 +427,8 @@ async function analyzeDocument(fileInput: File): Promise<ScreeningResult> {
         details: c.details,
         score: c.score
       })),
-      forensicTrace: data.forensic_trace
+      forensicTrace: data.forensic_trace,
+      biometricResult: biometricRes
     };
   } catch (error: any) {
     console.error('Backend connection failed:', error);
@@ -205,6 +442,12 @@ async function exportPdfAuditReport(screeningResult: ScreeningResult) {
       document_type: screeningResult.documentType,
       verdict: screeningResult.verdict,
       authenticity_score: screeningResult.authenticityScore,
+      biometric_verification: screeningResult.biometricResult ? {
+        match_score: screeningResult.biometricResult.matchScore,
+        verdict: screeningResult.biometricResult.verdict,
+        liveness_status: screeningResult.biometricResult.livenessStatus,
+        verdict_description: screeningResult.biometricResult.verdictDescription
+      } : null,
       extracted_fields: screeningResult.extractedFields.map(f => ({
         field_name: f.fieldName,
         value: f.value,
@@ -246,58 +489,160 @@ async function exportPdfAuditReport(screeningResult: ScreeningResult) {
 }
 
 // ============================================================================
-// MAIN COMPONENT (BLACK & ORANGE THEME)
+// MAIN COMPONENT (BORDER SECURITY & BIOMETRICS HUD)
 // ============================================================================
 
 export default function DocumentScreeningApp() {
   const [appState, setAppState] = useState<AppState>('upload');
+  const [appMode, setAppMode] = useState<AppMode>('egate_kiosk');
+  
+  // Document state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedPreset, setSelectedPreset] = useState<SamplePreset | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  
+
+  // Live Webcam state
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [liveFaceFile, setLiveFaceFile] = useState<File | null>(null);
+  const [liveFacePreviewUrl, setLiveFacePreviewUrl] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
+
   // Processing state
   const [processingProgress, setProcessingProgress] = useState(0);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  
+
   // Results state
   const [screeningResult, setScreeningResult] = useState<ScreeningResult | null>(null);
   const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'fields' | 'checks' | 'forensics'>('fields');
-  
+  const [activeTab, setActiveTab] = useState<'biometrics' | 'fields' | 'checks' | 'forensics'>('biometrics');
+  const [officerDecision, setOfficerDecision] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const liveFaceInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const processingSteps = [
     'Initializing Image Preprocessing & De-noising...',
     'Extracting OCR Text Fields & Layout Coordinates...',
     'Executing Digital Error Level Analysis (ELA)...',
-    'Verifying Government Checksum & Hash Algorithms...',
-    'Evaluating Facial Biometrics & Typography Alignment...'
+    'Detecting Facial Landmarks & 128-D SFace Embeddings...',
+    'Verifying 1:1 Live Biometric Cosine Match & Passive Liveness...',
+    'Cross-Checking Government Database & Checksums...'
   ];
 
+  // Clean up object URLs
   useEffect(() => {
     return () => {
-      if (imagePreviewUrl && imagePreviewUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(imagePreviewUrl);
-      }
+      if (imagePreviewUrl && imagePreviewUrl.startsWith('blob:')) URL.revokeObjectURL(imagePreviewUrl);
+      if (liveFacePreviewUrl && liveFacePreviewUrl.startsWith('blob:')) URL.revokeObjectURL(liveFacePreviewUrl);
+      stopCamera();
     };
-  }, [imagePreviewUrl]);
+  }, []);
 
-  const handleFileChange = (file: File) => {
+  // Camera Management
+  const startCamera = async () => {
+    setCameraError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+        audio: false
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+        setIsCameraActive(true);
+      }
+    } catch (err: any) {
+      console.error('Camera access error:', err);
+      setCameraError('Webcam access was denied or not available. You can upload a passenger photo instead.');
+      setIsCameraActive(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraActive(false);
+  };
+
+  const captureSnapshot = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const file = new File([blob], 'passenger_live_snapshot.jpg', { type: 'image/jpeg' });
+          setLiveFaceFile(file);
+          setLiveFacePreviewUrl(URL.createObjectURL(file));
+          stopCamera();
+        }
+      }, 'image/jpeg', 0.92);
+    }
+  };
+
+  const triggerAutoCapture = () => {
+    setCountdown(3);
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(timer);
+          captureSnapshot();
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleDocFileChange = (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('Please upload a valid image file (JPG or PNG).');
       return;
     }
     setSelectedFile(file);
+    setSelectedPreset(null);
     setImagePreviewUrl(URL.createObjectURL(file));
   };
 
+  const handleLiveFaceFileChange = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload a valid portrait image (JPG or PNG).');
+      return;
+    }
+    setLiveFaceFile(file);
+    setLiveFacePreviewUrl(URL.createObjectURL(file));
+    stopCamera();
+  };
+
+  const handlePresetSelect = (preset: SamplePreset) => {
+    setSelectedPreset(preset);
+    setSelectedFile(null);
+    setLiveFaceFile(null);
+    setImagePreviewUrl(preset.previewUrl);
+    setLiveFacePreviewUrl(preset.liveFaceUrl);
+    stopCamera();
+  };
+
   const handleStartScreening = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile && !selectedPreset) return;
 
     setAppState('processing');
     setProcessingProgress(10);
     setCurrentStepIndex(0);
+    setOfficerDecision(null);
 
     const interval = setInterval(() => {
       setProcessingProgress((prev) => {
@@ -305,7 +650,7 @@ export default function DocumentScreeningApp() {
           clearInterval(interval);
           return 92;
         }
-        const next = prev + Math.floor(Math.random() * 18) + 8;
+        const next = prev + Math.floor(Math.random() * 16) + 8;
         return next > 92 ? 92 : next;
       });
     }, 350);
@@ -319,12 +664,13 @@ export default function DocumentScreeningApp() {
     }, 450);
 
     try {
-      const result = await analyzeDocument(selectedFile);
-      
+      const input = selectedPreset || selectedFile!;
+      const result = await analyzeDocumentWithBiometrics(input, liveFaceFile);
+
       clearInterval(interval);
       clearInterval(stepInterval);
       setProcessingProgress(100);
-      
+
       setTimeout(() => {
         setScreeningResult(result);
         setAppState('results');
@@ -340,17 +686,24 @@ export default function DocumentScreeningApp() {
   const handleReset = () => {
     setAppState('upload');
     setSelectedFile(null);
+    setSelectedPreset(null);
+    setLiveFaceFile(null);
     setImagePreviewUrl(null);
+    setLiveFacePreviewUrl(null);
     setScreeningResult(null);
     setSelectedBoxId(null);
+    setOfficerDecision(null);
     setProcessingProgress(0);
+    stopCamera();
   };
 
   return (
     <div className="min-h-screen bg-dark-950 text-neutral-100 flex flex-col font-sans selection:bg-orange-600 selection:text-white">
-      
+      {/* Hidden canvas for snapshot capture */}
+      <canvas ref={canvasRef} className="hidden" />
+
       {/* ==================================================================== */}
-      {/* TOP HEADER / BAR (BLACK & ORANGE)                                    */}
+      {/* TOP HEADER / BAR                                                     */}
       {/* ==================================================================== */}
       <header className="border-b border-dark-700 bg-dark-900 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -373,15 +726,41 @@ export default function DocumentScreeningApp() {
             </div>
           </div>
 
+          {/* Mode Switcher */}
+          <div className="flex items-center gap-2 bg-black p-1 rounded-lg border border-dark-700">
+            <button
+              onClick={() => setAppMode('egate_kiosk')}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition ${
+                appMode === 'egate_kiosk'
+                  ? 'bg-orange-600 text-white shadow'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span>E-Gate Biometric Kiosk</span>
+            </button>
+            <button
+              onClick={() => setAppMode('standard')}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition ${
+                appMode === 'standard'
+                  ? 'bg-orange-600 text-white shadow'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Document Only</span>
+            </button>
+          </div>
+
           {/* Right Status */}
-          <div className="hidden sm:flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-dark-850 border border-dark-700 text-xs font-mono text-neutral-300">
-              <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-              <span>ENGINE: READY</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>BIOMETRIC CORE: ONLINE</span>
             </div>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-dark-850 border border-dark-700 text-xs font-mono text-orange-400">
               <Cpu className="w-3.5 h-3.5" />
-              <span>v4.2-Forensic</span>
+              <span>v4.3-SFace</span>
             </div>
           </div>
 
@@ -389,150 +768,376 @@ export default function DocumentScreeningApp() {
       </header>
 
       {/* ==================================================================== */}
-      {/* MAIN CONTAINER (BLACK & ORANGE)                                      */}
+      {/* MAIN BODY                                                            */}
       {/* ==================================================================== */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col">
         
-        {/* STATE 1: UPLOAD SCREEN */}
+        {/* STATE 1: UPLOAD & BIOMETRIC CAPTURE SCREEN */}
         {appState === 'upload' && (
-          <div className="space-y-8 my-auto py-4">
+          <div className="space-y-6 my-auto py-2">
             
             {/* Heading */}
-            <div className="text-center max-w-2xl mx-auto space-y-2">
+            <div className="text-center max-w-3xl mx-auto space-y-1.5">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-950/60 border border-orange-800/80 text-orange-400 text-xs font-mono mb-1">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>1:1 Live Facial Verification & Anti-Spoofing Enabled</span>
+              </div>
               <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                Verify Document Authenticity
+                Border Checkpoint & Document Screening Terminal
               </h2>
-              <p className="text-neutral-400 text-sm sm:text-base">
-                Upload identity credentials (Aadhaar, PAN, Driving License) to run automated multi-layered AI verification for tampering, font mismatch, and checksum integrity.
+              <p className="text-neutral-400 text-xs sm:text-sm">
+                Scan passenger identity credentials and verify live webcam biometric facial match in real time.
               </p>
             </div>
 
-            {/* Upload Box */}
-            <div className="max-w-2xl mx-auto">
-              <div
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setIsDragging(false);
-                  if (e.dataTransfer.files?.[0]) handleFileChange(e.dataTransfer.files[0]);
-                }}
-                onClick={() => !imagePreviewUrl && fileInputRef.current?.click()}
-                className={`matte-card p-8 text-center transition cursor-pointer relative ${
-                  isDragging
-                    ? 'border-orange-500 bg-dark-800'
-                    : imagePreviewUrl
-                    ? 'border-dark-700 bg-dark-850 cursor-default'
-                    : 'border-dark-700 hover:border-orange-500/80 bg-dark-850'
-                }`}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/jpg"
-                  className="hidden"
-                  onChange={(e) => e.target.files?.[0] && handleFileChange(e.target.files[0])}
-                />
-
-                {!imagePreviewUrl ? (
-                  <div className="space-y-4 py-4">
-                    <div className="w-14 h-14 rounded-xl bg-dark-800 border border-dark-700 flex items-center justify-center mx-auto text-orange-500">
-                      <UploadCloud className="w-7 h-7" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-white">
-                        Drag and drop your document image here
-                      </p>
-                      <p className="text-xs text-neutral-400 mt-1 font-mono">
-                        Supports JPG, JPEG, PNG up to 15MB
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        fileInputRef.current?.click();
-                      }}
-                      className="px-4 py-2 rounded-lg bg-dark-800 hover:bg-dark-700 text-neutral-200 text-xs font-semibold border border-dark-700 transition"
-                    >
-                      Browse File
-                    </button>
+            {/* Split Screen Ingest: Document on Left, Live Face on Right */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+              
+              {/* Box 1: Document Upload */}
+              <div className="matte-card p-5 border border-dark-700 flex flex-col justify-between space-y-4 bg-dark-850">
+                <div className="flex items-center justify-between border-b border-dark-700 pb-3">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-orange-500" />
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">
+                      Step 1: ID Document Scan
+                    </span>
                   </div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="relative max-h-64 rounded-lg overflow-hidden border border-dark-700 bg-black flex items-center justify-center p-2">
+                  <span className="text-[11px] font-mono text-neutral-400">Aadhaar / PAN / Passport</span>
+                </div>
+
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    if (e.dataTransfer.files?.[0]) handleDocFileChange(e.dataTransfer.files[0]);
+                  }}
+                  onClick={() => !imagePreviewUrl && fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-xl p-6 text-center transition cursor-pointer min-h-[220px] flex flex-col items-center justify-center relative ${
+                    isDragging
+                      ? 'border-orange-500 bg-dark-800'
+                      : imagePreviewUrl
+                      ? 'border-dark-700 bg-black cursor-default'
+                      : 'border-dark-700 hover:border-orange-500/80 bg-black/40'
+                  }`}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/jpg"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && handleDocFileChange(e.target.files[0])}
+                  />
+
+                  {!imagePreviewUrl ? (
+                    <div className="space-y-3">
+                      <div className="w-12 h-12 rounded-xl bg-dark-800 border border-dark-700 flex items-center justify-center mx-auto text-orange-500">
+                        <UploadCloud className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-white">
+                          Drop ID Card Scan Here or Browse
+                        </p>
+                        <p className="text-[11px] text-neutral-500 mt-0.5 font-mono">
+                          JPG, PNG up to 15MB
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                        className="px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-neutral-200 text-xs font-semibold border border-dark-700 transition"
+                      >
+                        Select Document
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative w-full h-48 flex items-center justify-center">
                       {/* eslint-disable-next-html-next-image */}
                       <img
                         src={imagePreviewUrl}
                         alt="Document Preview"
-                        className="max-h-60 object-contain rounded"
+                        className="max-h-44 object-contain rounded border border-dark-700"
                       />
-                      <div className="absolute top-3 right-3 bg-dark-900 px-2.5 py-1 rounded text-xs font-mono text-orange-400 border border-dark-700">
-                        Selected File
+                      <div className="absolute bottom-2 left-2 right-2 bg-dark-900/90 backdrop-blur px-2.5 py-1 rounded text-[11px] font-mono text-neutral-300 border border-dark-700 flex items-center justify-between">
+                        <span className="truncate">{selectedFile ? selectedFile.name : selectedPreset?.name}</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setImagePreviewUrl(null); setSelectedFile(null); setSelectedPreset(null); }}
+                          className="text-red-400 hover:text-red-300 ml-2 font-bold"
+                        >
+                          ✕
+                        </button>
                       </div>
                     </div>
-
-                    {selectedFile && (
-                      <div className="flex items-center justify-between text-xs text-neutral-300 bg-black p-3 rounded-lg border border-dark-700 font-mono">
-                        <div className="flex items-center gap-2 truncate">
-                          <FileText className="w-4 h-4 text-orange-500 flex-shrink-0" />
-                          <span className="truncate text-white">{selectedFile.name}</span>
-                        </div>
-                        <span className="text-neutral-400 flex-shrink-0 ml-2">
-                          {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-center gap-3 pt-2">
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); handleReset(); }}
-                        className="px-4 py-2.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-neutral-300 text-xs font-semibold border border-dark-700 transition"
-                      >
-                        Change File
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); handleStartScreening(); }}
-                        className="px-6 py-2.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs shadow-none transition flex items-center gap-2"
-                      >
-                        <Scan className="w-4 h-4" />
-                        <span>Start Screening</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
+
+              {/* Box 2: Live Webcam / Passenger Snapshot */}
+              <div className="matte-card p-5 border border-dark-700 flex flex-col justify-between space-y-4 bg-dark-850">
+                <div className="flex items-center justify-between border-b border-dark-700 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-orange-500" />
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">
+                      Step 2: Live Passenger Face
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1">
+                    <Radio className="w-3 h-3 animate-pulse" /> Live HUD
+                  </span>
+                </div>
+
+                <div className="relative border-2 border-dashed border-dark-700 rounded-xl min-h-[220px] bg-black flex flex-col items-center justify-center overflow-hidden">
+                  
+                  {/* Camera Viewfinder */}
+                  {isCameraActive && (
+                    <div className="relative w-full h-48 bg-black flex items-center justify-center">
+                      <video
+                        ref={videoRef}
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover rounded-lg transform -scale-x-100"
+                      />
+                      
+                      {/* Face Oval Reticle Overlay */}
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-28 h-36 border-2 border-dashed border-orange-500/80 rounded-full animate-pulse flex items-center justify-center">
+                          <span className="text-[10px] text-orange-400 font-mono bg-black/60 px-1.5 py-0.5 rounded">
+                            Align Face
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Countdown Overlay */}
+                      {countdown !== null && (
+                        <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+                          <span className="text-5xl font-extrabold text-orange-500 font-mono animate-ping">
+                            {countdown}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Capture Control Bar */}
+                      <div className="absolute bottom-2 left-2 right-2 flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={captureSnapshot}
+                          className="px-4 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-bold shadow-lg transition flex items-center gap-1.5"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                          <span>Snap Now</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={triggerAutoCapture}
+                          className="px-3 py-1.5 bg-dark-800 hover:bg-dark-700 text-neutral-200 border border-dark-700 rounded-lg text-xs font-mono transition"
+                        >
+                          ⏱ 3s Timer
+                        </button>
+                        <button
+                          type="button"
+                          onClick={stopCamera}
+                          className="px-2.5 py-1.5 bg-red-950 text-red-400 border border-red-900 rounded-lg text-xs transition"
+                        >
+                          <CameraOff className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Captured Photo Preview */}
+                  {!isCameraActive && liveFacePreviewUrl && (
+                    <div className="relative w-full h-48 flex items-center justify-center">
+                      {/* eslint-disable-next-html-next-image */}
+                      <img
+                        src={liveFacePreviewUrl}
+                        alt="Live Passenger"
+                        className="max-h-44 object-contain rounded border border-dark-700"
+                      />
+                      <div className="absolute bottom-2 left-2 right-2 bg-dark-900/90 backdrop-blur px-2.5 py-1 rounded text-[11px] font-mono text-neutral-300 border border-dark-700 flex items-center justify-between">
+                        <span className="truncate">Passenger Snapshot Ready</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={startCamera}
+                            className="text-orange-400 hover:text-orange-300 text-[11px] font-bold"
+                          >
+                            Retake
+                          </button>
+                          <button
+                            onClick={() => { setLiveFacePreviewUrl(null); setLiveFaceFile(null); }}
+                            className="text-red-400 hover:text-red-300 font-bold"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Idle Camera State */}
+                  {!isCameraActive && !liveFacePreviewUrl && (
+                    <div className="space-y-3 p-4 text-center">
+                      <div className="w-12 h-12 rounded-xl bg-dark-800 border border-dark-700 flex items-center justify-center mx-auto text-orange-500">
+                        <Camera className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-white">
+                          Capture Passenger Live via Webcam
+                        </p>
+                        <p className="text-[11px] text-neutral-500 mt-0.5 font-mono">
+                          Live E-Gate camera or portrait file upload
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={startCamera}
+                          className="px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs shadow transition flex items-center gap-1.5"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                          <span>Open Webcam</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => liveFaceInputRef.current?.click()}
+                          className="px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-neutral-200 text-xs font-semibold border border-dark-700 transition"
+                        >
+                          Upload Photo
+                        </button>
+                      </div>
+
+                      <input
+                        ref={liveFaceInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/jpg"
+                        className="hidden"
+                        onChange={(e) => e.target.files?.[0] && handleLiveFaceFileChange(e.target.files[0])}
+                      />
+
+                      {cameraError && (
+                        <p className="text-[11px] text-amber-400 font-mono mt-1">
+                          ⚠ {cameraError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                </div>
+              </div>
+
             </div>
 
+            {/* Launch Screening Button */}
+            {(imagePreviewUrl || selectedPreset) && (
+              <div className="max-w-md mx-auto text-center pt-2">
+                <button
+                  type="button"
+                  onClick={handleStartScreening}
+                  className="w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-sm shadow-lg transition flex items-center justify-center gap-2"
+                >
+                  <Scan className="w-4 h-4" />
+                  <span>Execute Full Forensic & Biometric Screening</span>
+                </button>
+              </div>
+            )}
 
+            {/* Instant Demo Presets (With Pre-Configured Biometric Pairs) */}
+            <div className="max-w-4xl mx-auto pt-2">
+              <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2 text-center">
+                Or choose an instant border screening test case:
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {SAMPLE_PRESETS.map((preset) => {
+                  const isSelected = selectedPreset?.id === preset.id;
+                  return (
+                    <div
+                      key={preset.id}
+                      onClick={() => handlePresetSelect(preset)}
+                      className={`matte-card p-3.5 transition cursor-pointer text-left flex flex-col justify-between ${
+                        isSelected
+                          ? 'border-orange-500 bg-dark-800 ring-1 ring-orange-500'
+                          : 'hover:border-dark-600 bg-dark-850'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <span className="text-xs font-bold text-white truncate">
+                            {preset.docType}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded ${
+                              preset.badgeStyle === 'success'
+                                ? 'bg-emerald-950 text-emerald-400 border-emerald-900'
+                                : 'bg-red-950 text-red-400 border-red-900'
+                            }`}
+                          >
+                            {preset.badgeText}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-neutral-400 line-clamp-2 mb-2">
+                          {preset.description}
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-dark-700 flex items-center justify-between text-xs text-orange-500 font-medium">
+                        <span>Load Test Pair</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
           </div>
         )}
 
         {/* STATE 2: PROCESSING SCREEN */}
         {appState === 'processing' && (
-          <div className="my-auto py-12 max-w-lg mx-auto w-full space-y-6 text-center">
+          <div className="my-auto py-10 max-w-lg mx-auto w-full space-y-6 text-center">
             
-            <div className="relative max-w-sm mx-auto aspect-[1.6/1] rounded-xl overflow-hidden border border-dark-700 bg-black">
-              {imagePreviewUrl && (
-                /* eslint-disable-next-html-next-image */
-                <img
-                  src={imagePreviewUrl}
-                  alt="Scanning Target"
-                  className="w-full h-full object-cover opacity-60"
-                />
-              )}
-              {/* Clean matte orange scanning bar */}
-              <div className="absolute left-0 right-0 h-1 bg-orange-500 animate-scan-laser" />
+            <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto">
+              <div className="relative aspect-[1.3/1] rounded-lg overflow-hidden border border-dark-700 bg-black">
+                {imagePreviewUrl && (
+                  /* eslint-disable-next-html-next-image */
+                  <img
+                    src={imagePreviewUrl}
+                    alt="Document Ingest"
+                    className="w-full h-full object-cover opacity-60"
+                  />
+                )}
+                <div className="absolute top-1.5 left-1.5 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-mono text-orange-400">
+                  DOC SCAN
+                </div>
+                <div className="absolute left-0 right-0 h-0.5 bg-orange-500 animate-scan-laser" />
+              </div>
+
+              <div className="relative aspect-[1.3/1] rounded-lg overflow-hidden border border-dark-700 bg-black">
+                {liveFacePreviewUrl ? (
+                  /* eslint-disable-next-html-next-image */
+                  <img
+                    src={liveFacePreviewUrl}
+                    alt="Live Face"
+                    className="w-full h-full object-cover opacity-60"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-neutral-600">
+                    <Camera className="w-6 h-6" />
+                  </div>
+                )}
+                <div className="absolute top-1.5 left-1.5 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-mono text-emerald-400">
+                  LIVE FACE
+                </div>
+                <div className="absolute left-0 right-0 h-0.5 bg-emerald-500 animate-scan-laser" />
+              </div>
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs font-mono">
                 <span className="text-orange-400 font-semibold flex items-center gap-2">
                   <Cpu className="w-4 h-4 animate-spin text-orange-500" />
-                  ANALYZING DOCUMENT STRUCTURE...
+                  RUNNING S-FACE EMBEDDINGS & ELA PIPELINE...
                 </span>
                 <span className="text-white font-bold">{processingProgress}%</span>
               </div>
@@ -545,10 +1150,10 @@ export default function DocumentScreeningApp() {
               </div>
             </div>
 
-            {/* Console Log */}
+            {/* Live Progress Logs */}
             <div className="bg-black border border-dark-700 rounded-xl p-4 text-left font-mono text-xs space-y-2">
               <div className="text-[10px] text-neutral-500 uppercase tracking-wider border-b border-dark-700 pb-1 mb-2">
-                Execution Telemetry:
+                Execution Pipeline:
               </div>
               {processingSteps.map((step, idx) => {
                 const isCompleted = idx < currentStepIndex;
@@ -582,12 +1187,12 @@ export default function DocumentScreeningApp() {
 
         {/* STATE 3: RESULTS SCREEN */}
         {appState === 'results' && screeningResult && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             
             {/* Top Score Banner */}
-            <div className="matte-card p-6 border border-dark-700 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="matte-card p-5 border border-dark-700 flex flex-col md:flex-row items-center justify-between gap-5 bg-dark-900">
               
-              <div className="flex items-center gap-6">
+              <div className="flex items-center gap-5">
                 
                 {/* Score Box */}
                 <div className={`w-20 h-20 rounded-xl flex flex-col items-center justify-center font-mono border ${
@@ -632,13 +1237,13 @@ export default function DocumentScreeningApp() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-3 w-full md:w-auto justify-end border-t md:border-t-0 pt-4 md:pt-0 border-dark-700">
+              <div className="flex items-center gap-2.5 w-full md:w-auto justify-end border-t md:border-t-0 pt-4 md:pt-0 border-dark-700">
                 <button
                   onClick={() => exportPdfAuditReport(screeningResult)}
                   className="px-3.5 py-2 rounded-lg bg-dark-800 hover:bg-dark-700 text-neutral-200 text-xs font-semibold border border-dark-700 flex items-center gap-2 transition cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5 text-neutral-300" />
-                  <span>Export Report (PDF)</span>
+                  <span>PDF Audit Certificate</span>
                 </button>
 
                 <button
@@ -646,155 +1251,319 @@ export default function DocumentScreeningApp() {
                   className="px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs transition flex items-center gap-2 shadow-none cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Screen Another</span>
+                  <span>Next Passenger</span>
                 </button>
               </div>
 
             </div>
 
+            {/* Officer Quick Decision Panel */}
+            <div className="matte-card p-3.5 border border-dark-700 flex flex-col sm:flex-row items-center justify-between gap-3 bg-dark-850">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-orange-500" />
+                <span className="text-xs font-bold text-white uppercase tracking-wider">
+                  Border Officer Action:
+                </span>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={() => setOfficerDecision('CLEARED')}
+                  className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                    officerDecision === 'CLEARED'
+                      ? 'bg-emerald-600 text-white ring-2 ring-emerald-400'
+                      : 'bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800'
+                  }`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Approve Entry</span>
+                </button>
+                <button
+                  onClick={() => setOfficerDecision('SECONDARY')}
+                  className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                    officerDecision === 'SECONDARY'
+                      ? 'bg-amber-600 text-white ring-2 ring-amber-400'
+                      : 'bg-amber-950 hover:bg-amber-900 text-amber-300 border border-amber-800'
+                  }`}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Secondary Check</span>
+                </button>
+                <button
+                  onClick={() => setOfficerDecision('DETAIN')}
+                  className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                    officerDecision === 'DETAIN'
+                      ? 'bg-red-600 text-white ring-2 ring-red-400'
+                      : 'bg-red-950 hover:bg-red-900 text-red-300 border border-red-800'
+                  }`}
+                >
+                  <ShieldX className="w-3.5 h-3.5" />
+                  <span>Trigger Alert</span>
+                </button>
+              </div>
+            </div>
+
             {/* Inspector Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
               
-              {/* Left Column: Bounding Box Inspector */}
-              <div className="lg:col-span-7 matte-card p-5 border border-dark-700 space-y-4 flex flex-col">
+              {/* Left Column: Side-by-Side Biometric Comparison + Document Canvas */}
+              <div className="lg:col-span-7 space-y-4">
                 
-                <div className="flex items-center justify-between text-xs border-b border-dark-700 pb-3">
-                  <div className="flex items-center gap-2 font-bold text-white">
-                    <Scan className="w-4 h-4 text-orange-500" />
-                    <span>Document Canvas & Flagged Regions</span>
-                  </div>
-                  <button
-                    onClick={() => setShowBoundingBoxes(!showBoundingBoxes)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-mono transition ${
-                      showBoundingBoxes
-                        ? 'bg-dark-800 border-dark-700 text-white'
-                        : 'bg-black border-dark-700 text-neutral-500'
-                    }`}
-                  >
-                    {showBoundingBoxes ? <Eye className="w-3.5 h-3.5 text-orange-500" /> : <EyeOff className="w-3.5 h-3.5" />}
-                    <span>Overlays ({screeningResult.boundingBoxes.length})</span>
-                  </button>
-                </div>
-
-                {/* Canvas Container */}
-                <div className="relative flex-1 min-h-[320px] max-h-[460px] rounded-lg overflow-hidden bg-black border border-dark-700 flex items-center justify-center p-2">
-                  {imagePreviewUrl && (
-                    <div className="relative inline-block max-w-full max-h-full">
-                      {/* eslint-disable-next-html-next-image */}
-                      <img
-                        src={imagePreviewUrl}
-                        alt="Document Canvas"
-                        className="max-h-[420px] object-contain rounded"
-                      />
-
-                      {/* Bounding Box Overlays */}
-                      {showBoundingBoxes &&
-                        screeningResult.boundingBoxes.map((box) => {
-                          const isSelected = selectedBoxId === box.id;
-                          const isCritical = box.type === 'critical';
-
-                          const boxStyle = isCritical
-                            ? 'border-2 border-red-500 bg-red-950/40 text-red-300'
-                            : 'border-2 border-orange-500 bg-orange-950/40 text-orange-300';
-
-                          return (
-                            <div
-                              key={box.id}
-                              onClick={() => setSelectedBoxId(box.id)}
-                              style={{
-                                left: `${box.x}%`,
-                                top: `${box.y}%`,
-                                width: `${box.width}%`,
-                                height: `${box.height}%`
-                              }}
-                              className={`absolute rounded cursor-pointer transition ${boxStyle} ${
-                                isSelected ? 'ring-2 ring-white z-30' : 'z-20'
-                              }`}
-                            >
-                              <div className="absolute -top-6 left-0 bg-dark-900 border border-dark-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold whitespace-nowrap text-white">
-                                {box.label}
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Region Legend */}
-                <div className="space-y-2 pt-1">
-                  <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider">
-                    Flagged Anomalies:
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {screeningResult.boundingBoxes.map((box) => (
-                      <div
-                        key={box.id}
-                        onClick={() => setSelectedBoxId(box.id)}
-                        className={`p-2.5 rounded-lg border text-xs cursor-pointer transition ${
-                          selectedBoxId === box.id
-                            ? 'border-orange-500 bg-dark-800'
-                            : 'border-dark-700 hover:border-dark-600 bg-black'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 font-bold text-white">
-                          {box.type === 'critical' ? (
-                            <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                          ) : (
-                            <AlertTriangle className="w-4 h-4 text-orange-500 flex-shrink-0" />
-                          )}
-                          <span>{box.label}</span>
-                        </div>
-                        <p className="text-[11px] text-neutral-400 mt-1">
-                          {box.description}
-                        </p>
+                {/* 1:1 Biometric Comparison Card */}
+                {screeningResult.biometricResult && (
+                  <div className="matte-card p-4 border border-dark-700 bg-dark-900 space-y-3">
+                    <div className="flex items-center justify-between border-b border-dark-700 pb-2">
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="w-4 h-4 text-orange-500" />
+                        <span className="text-xs font-bold text-white uppercase tracking-wider">
+                          1:1 Biometric Facial Comparison
+                        </span>
                       </div>
-                    ))}
+                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                        screeningResult.biometricResult.isMatch
+                          ? 'bg-emerald-950 text-emerald-400 border-emerald-900'
+                          : 'bg-red-950 text-red-400 border-red-900'
+                      }`}>
+                        {screeningResult.biometricResult.verdict}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3 items-center">
+                      
+                      {/* Document Portrait */}
+                      <div className="space-y-1 text-center">
+                        <span className="text-[10px] font-mono text-neutral-400 uppercase">Document Portrait</span>
+                        <div className="aspect-square rounded-lg overflow-hidden border border-dark-700 bg-black flex items-center justify-center p-1">
+                          {screeningResult.biometricResult.docFaceCropBase64 ? (
+                            /* eslint-disable-next-html-next-image */
+                            <img
+                              src={screeningResult.biometricResult.docFaceCropBase64}
+                              alt="Doc Crop"
+                              className="w-full h-full object-cover rounded"
+                            />
+                          ) : (
+                            <img
+                              src={imagePreviewUrl || ''}
+                              alt="Doc Face"
+                              className="w-full h-full object-cover rounded"
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Similarity Metric Gauge */}
+                      <div className="space-y-2 text-center px-1">
+                        <div className="flex items-center justify-center gap-1 text-xs text-neutral-400 font-mono">
+                          <ArrowRightLeft className="w-3.5 h-3.5 text-orange-500" />
+                          <span>Similarity</span>
+                        </div>
+                        <div className={`text-2xl font-extrabold font-mono ${
+                          screeningResult.biometricResult.isMatch ? 'text-emerald-400' : 'text-red-400'
+                        }`}>
+                          {screeningResult.biometricResult.matchScore}%
+                        </div>
+                        <div className="w-full bg-black rounded-full h-1.5 overflow-hidden border border-dark-700">
+                          <div
+                            className={`h-full ${screeningResult.biometricResult.isMatch ? 'bg-emerald-500' : 'bg-red-500'}`}
+                            style={{ width: `${screeningResult.biometricResult.matchScore}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-mono text-neutral-400 block truncate">
+                          Cosine: {screeningResult.biometricResult.cosineSimilarity.toFixed(3)}
+                        </span>
+                      </div>
+
+                      {/* Live Camera Snapshot */}
+                      <div className="space-y-1 text-center">
+                        <span className="text-[10px] font-mono text-neutral-400 uppercase">Live Passenger</span>
+                        <div className="aspect-square rounded-lg overflow-hidden border border-dark-700 bg-black flex items-center justify-center p-1">
+                          {screeningResult.biometricResult.liveFaceCropBase64 ? (
+                            /* eslint-disable-next-html-next-image */
+                            <img
+                              src={screeningResult.biometricResult.liveFaceCropBase64}
+                              alt="Live Crop"
+                              className="w-full h-full object-cover rounded"
+                            />
+                          ) : liveFacePreviewUrl ? (
+                            <img
+                              src={liveFacePreviewUrl}
+                              alt="Live Face"
+                              className="w-full h-full object-cover rounded"
+                            />
+                          ) : (
+                            <div className="text-neutral-600">
+                              <Camera className="w-6 h-6 mx-auto" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-black border border-dark-700 text-xs flex items-center justify-between">
+                      <span className="text-neutral-400 font-mono text-[11px]">
+                        Anti-Spoofing / Passive Liveness:
+                      </span>
+                      <span className={`text-[11px] font-bold font-mono ${
+                        screeningResult.biometricResult.isLivePerson ? 'text-emerald-400' : 'text-red-400'
+                      }`}>
+                        {screeningResult.biometricResult.livenessStatus} ({screeningResult.biometricResult.livenessScore}/100)
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Document Canvas Inspector */}
+                <div className="matte-card p-4 border border-dark-700 space-y-3 bg-dark-850">
+                  <div className="flex items-center justify-between text-xs border-b border-dark-700 pb-2">
+                    <div className="flex items-center gap-2 font-bold text-white">
+                      <Scan className="w-4 h-4 text-orange-500" />
+                      <span>Document Canvas & Overlays</span>
+                    </div>
+                    <button
+                      onClick={() => setShowBoundingBoxes(!showBoundingBoxes)}
+                      className={`flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] font-mono transition ${
+                        showBoundingBoxes
+                          ? 'bg-dark-800 border-dark-700 text-white'
+                          : 'bg-black border-dark-700 text-neutral-500'
+                      }`}
+                    >
+                      {showBoundingBoxes ? <Eye className="w-3 h-3 text-orange-500" /> : <EyeOff className="w-3 h-3" />}
+                      <span>Overlays ({screeningResult.boundingBoxes.length})</span>
+                    </button>
+                  </div>
+
+                  <div className="relative min-h-[260px] max-h-[360px] rounded-lg overflow-hidden bg-black border border-dark-700 flex items-center justify-center p-2">
+                    {imagePreviewUrl && (
+                      <div className="relative inline-block max-w-full max-h-full">
+                        {/* eslint-disable-next-html-next-image */}
+                        <img
+                          src={imagePreviewUrl}
+                          alt="Document Canvas"
+                          className="max-h-[340px] object-contain rounded"
+                        />
+
+                        {showBoundingBoxes &&
+                          screeningResult.boundingBoxes.map((box) => {
+                            const isSelected = selectedBoxId === box.id;
+                            const isCritical = box.type === 'critical';
+
+                            const boxStyle = isCritical
+                              ? 'border-2 border-red-500 bg-red-950/40 text-red-300'
+                              : 'border-2 border-orange-500 bg-orange-950/40 text-orange-300';
+
+                            return (
+                              <div
+                                key={box.id}
+                                onClick={() => setSelectedBoxId(box.id)}
+                                style={{
+                                  left: `${box.x}%`,
+                                  top: `${box.y}%`,
+                                  width: `${box.width}%`,
+                                  height: `${box.height}%`
+                                }}
+                                className={`absolute rounded cursor-pointer transition ${boxStyle} ${
+                                  isSelected ? 'ring-2 ring-white z-30' : 'z-20'
+                                }`}
+                              >
+                                <div className="absolute -top-5 left-0 bg-dark-900 border border-dark-700 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold whitespace-nowrap text-white">
+                                  {box.label}
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
                   </div>
                 </div>
 
               </div>
 
-              {/* Right Column: Metadata & Checks */}
-              <div className="lg:col-span-5 matte-card p-5 border border-dark-700 space-y-4 flex flex-col">
+              {/* Right Column: Multi-Tab Forensic Matrix */}
+              <div className="lg:col-span-5 matte-card p-5 border border-dark-700 space-y-4 flex flex-col bg-dark-850">
                 
                 {/* Tabs */}
-                <div className="flex border-b border-dark-700 text-xs font-semibold">
+                <div className="flex border-b border-dark-700 text-xs font-semibold overflow-x-auto">
+                  <button
+                    onClick={() => setActiveTab('biometrics')}
+                    className={`pb-2 px-2.5 border-b-2 transition whitespace-nowrap ${
+                      activeTab === 'biometrics'
+                        ? 'border-orange-500 text-orange-400'
+                        : 'border-transparent text-neutral-400 hover:text-neutral-200'
+                    }`}
+                  >
+                    Biometrics
+                  </button>
                   <button
                     onClick={() => setActiveTab('fields')}
-                    className={`pb-2.5 px-3 border-b-2 transition ${
+                    className={`pb-2 px-2.5 border-b-2 transition whitespace-nowrap ${
                       activeTab === 'fields'
                         ? 'border-orange-500 text-orange-400'
                         : 'border-transparent text-neutral-400 hover:text-neutral-200'
                     }`}
                   >
-                    Extracted Fields ({screeningResult.extractedFields.length})
+                    Fields ({screeningResult.extractedFields.length})
                   </button>
                   <button
                     onClick={() => setActiveTab('checks')}
-                    className={`pb-2.5 px-3 border-b-2 transition ${
+                    className={`pb-2 px-2.5 border-b-2 transition whitespace-nowrap ${
                       activeTab === 'checks'
                         ? 'border-orange-500 text-orange-400'
                         : 'border-transparent text-neutral-400 hover:text-neutral-200'
                     }`}
                   >
-                    Validation Checks ({screeningResult.validationChecks.length})
+                    Matrix ({screeningResult.validationChecks.length})
                   </button>
                   <button
                     onClick={() => setActiveTab('forensics')}
-                    className={`pb-2.5 px-3 border-b-2 transition ${
+                    className={`pb-2 px-2.5 border-b-2 transition whitespace-nowrap ${
                       activeTab === 'forensics'
                         ? 'border-orange-500 text-orange-400'
                         : 'border-transparent text-neutral-400 hover:text-neutral-200'
                     }`}
                   >
-                    Forensics Trace
+                    Trace
                   </button>
                 </div>
 
-                {/* Tab 1: Extracted Fields Table */}
+                {/* Tab 0: Biometrics Overview */}
+                {activeTab === 'biometrics' && (
+                  <div className="space-y-3 flex-1 overflow-y-auto max-h-[460px] pr-1">
+                    {screeningResult.biometricResult ? (
+                      <div className="space-y-3">
+                        <div className="p-3.5 rounded-lg bg-black border border-dark-700 text-xs space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-white">SFace Neural Network Match</span>
+                            <span className="text-emerald-400 font-mono font-bold">
+                              {screeningResult.biometricResult.matchScore}% Confidence
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-neutral-400">
+                            {screeningResult.biometricResult.verdictDescription}
+                          </p>
+                        </div>
+
+                        <div className="p-3.5 rounded-lg bg-black border border-dark-700 text-xs space-y-2 font-mono">
+                          <div className="text-orange-400 font-bold border-b border-dark-700 pb-1 text-[11px]">
+                            BIOMETRIC TELEMETRY
+                          </div>
+                          <div className="text-[11px] space-y-1 text-neutral-300">
+                            <div>• Cosine Metric: <strong className="text-white">{screeningResult.biometricResult.cosineSimilarity}</strong></div>
+                            <div>• Passive Liveness: <strong className="text-white">{screeningResult.biometricResult.livenessStatus} ({screeningResult.biometricResult.livenessScore}/100)</strong></div>
+                            <div>• Anti-Spoofing: <strong className="text-white">{screeningResult.biometricResult.isLivePerson ? 'PASSED (Genuine Skin Texture)' : 'ALERT (Presentation Attack)'}</strong></div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-6 text-center text-xs text-neutral-400">
+                        No live webcam capture provided. Provide a passenger face snapshot to enable 1:1 facial verification.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Tab 1: Extracted Fields */}
                 {activeTab === 'fields' && (
-                  <div className="space-y-2 flex-1 overflow-y-auto max-h-[440px] pr-1">
+                  <div className="space-y-2 flex-1 overflow-y-auto max-h-[460px] pr-1">
                     <div className="border border-dark-700 rounded-lg overflow-hidden bg-black divide-y divide-dark-700">
                       {screeningResult.extractedFields.map((field, idx) => (
                         <div key={idx} className="p-3 text-xs space-y-1">
@@ -824,13 +1593,13 @@ export default function DocumentScreeningApp() {
                   </div>
                 )}
 
-                {/* Tab 2: Validation Checks */}
+                {/* Tab 2: Validation Matrix */}
                 {activeTab === 'checks' && (
-                  <div className="space-y-3 flex-1 overflow-y-auto max-h-[440px] pr-1">
+                  <div className="space-y-2.5 flex-1 overflow-y-auto max-h-[460px] pr-1">
                     {screeningResult.validationChecks.map((check) => (
                       <div
                         key={check.id}
-                        className="p-3 rounded-lg border border-dark-700 bg-black text-xs space-y-1.5"
+                        className="p-3 rounded-lg border border-dark-700 bg-black text-xs space-y-1"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
@@ -844,8 +1613,8 @@ export default function DocumentScreeningApp() {
                           <span
                             className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
                               check.status === 'pass'
-                                ? 'bg-emerald-950 text-emerald-400 border border-emerald-900'
-                                : 'bg-red-950 text-red-400 border border-red-900'
+                                ? 'bg-emerald-950 text-emerald-400 border-emerald-900'
+                                : 'bg-red-950 text-red-400 border-red-900'
                             }`}
                           >
                             {check.score}/100
@@ -861,10 +1630,10 @@ export default function DocumentScreeningApp() {
 
                 {/* Tab 3: Forensics Trace */}
                 {activeTab === 'forensics' && (
-                  <div className="space-y-3 flex-1 overflow-y-auto max-h-[440px] pr-1">
+                  <div className="space-y-3 flex-1 overflow-y-auto max-h-[460px] pr-1">
                     <div className="p-3.5 rounded-lg bg-black border border-dark-700 text-xs space-y-2 font-mono">
                       <div className="text-neutral-400 font-bold border-b border-dark-700 pb-1 text-[11px]">
-                        FORENSIC TRACE LOGS
+                        FORENSIC AUDIT TELEMETRY TRACE
                       </div>
                       <ul className="space-y-2">
                         {screeningResult.forensicTrace.map((item, i) => (
@@ -874,11 +1643,6 @@ export default function DocumentScreeningApp() {
                           </li>
                         ))}
                       </ul>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-black border border-dark-700 text-[11px] text-neutral-400 font-mono space-y-1">
-                      <div className="text-orange-500 font-bold">FastAPI Integration:</div>
-                      <p>Swap <code className="text-white">analyzeDocument(file)</code> in <code className="text-white">app/page.tsx</code> with your endpoint call.</p>
                     </div>
                   </div>
                 )}
@@ -899,7 +1663,7 @@ export default function DocumentScreeningApp() {
             <span>Ministry of Home Affairs (MHA) • Smart India Hackathon PS26188</span>
           </div>
           <div className="font-mono text-[11px] text-orange-400">
-            Document Verification Portal
+            Automated Border E-Gate Terminal v4.3
           </div>
         </div>
       </footer>
