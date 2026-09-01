@@ -8,55 +8,22 @@ module.exports = {
   ],
   theme: {
     extend: {
-      borderWidth: {
-        '3': '3px',
-      },
       colors: {
-        docsentinels: {
-          yellow: '#FFCE38',
-          yellowLight: '#FFF2C6',
-          yellowDark: '#F5B81C',
-          orange: '#F38E22',
-          orangeDark: '#D97108',
-          pink: '#FF007A',
-          pinkHover: '#E6006E',
-          pinkLight: '#FFE5F0',
-          cream: '#FFFBF0',
-          creamCard: '#FFF8E7',
-          blue: '#183059',
-          darkBlue: '#0E1D38',
-          black: '#0D0D0D',
-        },
-        aardvark: {
-          yellow: '#FFCE38',
-          yellowLight: '#FFF2C6',
-          yellowDark: '#F5B81C',
-          orange: '#F38E22',
-          orangeDark: '#D97108',
-          pink: '#FF007A',
-          pinkHover: '#E6006E',
-          pinkLight: '#FFE5F0',
-          cream: '#FFFBF0',
-          creamCard: '#FFF8E7',
-          blue: '#183059',
-          darkBlue: '#0E1D38',
-          black: '#0D0D0D',
-        },
         dark: {
-          950: '#050505',
-          900: '#0A0A0A',
-          850: '#121212',
-          800: '#1C1C1C',
-          700: '#2A2A2A',
-          600: '#383838',
+          950: '#050505', // Deep pitch black
+          900: '#0A0A0A', // Main black background
+          850: '#121212', // Surface dark black
+          800: '#1C1C1C', // Card matte background
+          700: '#2A2A2A', // Border gray
+          600: '#383838', // Subtle line gray
           500: '#525252',
         },
         orange: {
           400: '#FB923C',
-          500: '#F97316',
-          600: '#EA580C',
+          500: '#F97316', // Solid Primary Orange
+          600: '#EA580C', // Brand Primary Action
           700: '#C2410C',
-          900: '#7C2D12',
+          900: '#7C2D12', // Deep Orange Surface
           950: '#431407',
         },
         emerald: {
@@ -73,16 +40,8 @@ module.exports = {
         }
       },
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
-        display: ['"Syne"', '"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
-        script: ['"Caveat"', 'cursive'],
-        mono: ['"JetBrains Mono"', 'Fira Code', 'Consolas', 'monospace'],
-      },
-      boxShadow: {
-        'pill': '0 2px 8px rgba(0, 0, 0, 0.08)',
-        'pill-hover': '0 6px 20px rgba(0, 0, 0, 0.12)',
-        'card-warm': '0 12px 36px -8px rgba(184, 115, 10, 0.15), 0 4px 12px -2px rgba(0, 0, 0, 0.06)',
-        '3d-book': '-20px 25px 50px -10px rgba(0, 0, 0, 0.35), 10px 10px 30px rgba(243, 142, 34, 0.25)',
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
       },
     },
   },
