@@ -525,7 +525,14 @@ export default function DocumentScreeningApp() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const processingSteps = [
+  const processingSteps = appMode === 'standard' ? [
+    'Initializing Image Preprocessing & De-noising...',
+    'Extracting OCR Text Fields & Layout Coordinates...',
+    'Executing Digital Error Level Analysis (ELA)...',
+    'Bypassing Biometrics (Document Only Mode active)...',
+    'Cross-Checking Government Database & Checksums...',
+    'Generating Document Forensic Audit Certificate...'
+  ] : [
     'Initializing Image Preprocessing & De-noising...',
     'Extracting OCR Text Fields & Layout Coordinates...',
     'Executing Digital Error Level Analysis (ELA)...',
@@ -665,7 +672,14 @@ export default function DocumentScreeningApp() {
 
     try {
       const input = selectedPreset || selectedFile!;
-      const result = await analyzeDocumentWithBiometrics(input, liveFaceFile);
+      const result = await analyzeDocumentWithBiometrics(
+        input,
+        appMode === 'standard' ? null : liveFaceFile
+      );
+
+      if (appMode === 'standard' && result.biometricResult) {
+        result.biometricResult = undefined;
+      }
 
       clearInterval(interval);
       clearInterval(stepInterval);
@@ -673,6 +687,11 @@ export default function DocumentScreeningApp() {
 
       setTimeout(() => {
         setScreeningResult(result);
+        if (appMode === 'standard') {
+          setActiveTab('fields');
+        } else {
+          setActiveTab('biometrics');
+        }
         setAppState('results');
       }, 400);
     } catch (err: any) {
@@ -729,8 +748,11 @@ export default function DocumentScreeningApp() {
           {/* Mode Switcher */}
           <div className="flex items-center gap-2 bg-black p-1 rounded-lg border border-dark-700">
             <button
-              onClick={() => setAppMode('egate_kiosk')}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition ${
+              onClick={() => {
+                if (isCameraActive) stopCamera();
+                setAppMode('egate_kiosk');
+              }}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
                 appMode === 'egate_kiosk'
                   ? 'bg-orange-600 text-white shadow'
                   : 'text-neutral-400 hover:text-white'
@@ -740,8 +762,11 @@ export default function DocumentScreeningApp() {
               <span>E-Gate Biometric Kiosk</span>
             </button>
             <button
-              onClick={() => setAppMode('standard')}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition ${
+              onClick={() => {
+                if (isCameraActive) stopCamera();
+                setAppMode('standard');
+              }}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
                 appMode === 'standard'
                   ? 'bg-orange-600 text-white shadow'
                   : 'text-neutral-400 hover:text-white'
@@ -780,18 +805,30 @@ export default function DocumentScreeningApp() {
             <div className="text-center max-w-3xl mx-auto space-y-1.5">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-950/60 border border-orange-800/80 text-orange-400 text-xs font-mono mb-1">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>1:1 Live Facial Verification & Anti-Spoofing Enabled</span>
+                <span>
+                  {appMode === 'egate_kiosk'
+                    ? '1:1 Live Facial Verification & Anti-Spoofing Enabled'
+                    : 'Document Only Forensic Screening Mode'}
+                </span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                Border Checkpoint & Document Screening Terminal
+                {appMode === 'egate_kiosk'
+                  ? 'Border Checkpoint & Document Screening Terminal'
+                  : 'Identity Document Analysis & Forensic Screening'}
               </h2>
               <p className="text-neutral-400 text-xs sm:text-sm">
-                Scan passenger identity credentials and verify live webcam biometric facial match in real time.
+                {appMode === 'egate_kiosk'
+                  ? 'Scan passenger identity credentials and verify live webcam biometric facial match in real time.'
+                  : 'Scan and analyze ID credentials (Aadhaar, PAN, Passport) for tampering, OCR extraction, ELA splicing, and checksum verification.'}
               </p>
             </div>
 
-            {/* Split Screen Ingest: Document on Left, Live Face on Right */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+            {/* Split Screen Ingest: Document on Left, Live Face on Right (E-Gate Kiosk) OR Single Column (Document Only) */}
+            <div className={
+              appMode === 'egate_kiosk'
+                ? "grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto"
+                : "max-w-2xl mx-auto"
+            }>
               
               {/* Box 1: Document Upload */}
               <div className="matte-card p-5 border border-dark-700 flex flex-col justify-between space-y-4 bg-dark-850">
@@ -799,7 +836,7 @@ export default function DocumentScreeningApp() {
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-orange-500" />
                     <span className="text-xs font-bold text-white uppercase tracking-wider">
-                      Step 1: ID Document Scan
+                      {appMode === 'egate_kiosk' ? 'Step 1: ID Document Scan' : 'ID Document Scan'}
                     </span>
                   </div>
                   <span className="text-[11px] font-mono text-neutral-400">Aadhaar / PAN / Passport</span>
@@ -873,7 +910,8 @@ export default function DocumentScreeningApp() {
                 </div>
               </div>
 
-              {/* Box 2: Live Webcam / Passenger Snapshot */}
+              {/* Box 2: Live Webcam / Passenger Snapshot (Only in E-Gate Kiosk mode) */}
+              {appMode === 'egate_kiosk' && (
               <div className="matte-card p-5 border border-dark-700 flex flex-col justify-between space-y-4 bg-dark-850">
                 <div className="flex items-center justify-between border-b border-dark-700 pb-3">
                   <div className="flex items-center gap-2">
@@ -1024,6 +1062,7 @@ export default function DocumentScreeningApp() {
 
                 </div>
               </div>
+              )}
 
             </div>
 
@@ -1114,7 +1153,12 @@ export default function DocumentScreeningApp() {
               </div>
 
               <div className="relative aspect-[1.3/1] rounded-lg overflow-hidden border border-dark-700 bg-black">
-                {liveFacePreviewUrl ? (
+                {appMode === 'standard' ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-neutral-500 text-center p-2">
+                    <FileText className="w-6 h-6 text-neutral-600 mb-1" />
+                    <span className="text-[10px] font-mono text-neutral-400">DOC ONLY MODE</span>
+                  </div>
+                ) : liveFacePreviewUrl ? (
                   /* eslint-disable-next-html-next-image */
                   <img
                     src={liveFacePreviewUrl}
@@ -1127,9 +1171,11 @@ export default function DocumentScreeningApp() {
                   </div>
                 )}
                 <div className="absolute top-1.5 left-1.5 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-mono text-emerald-400">
-                  LIVE FACE
+                  {appMode === 'standard' ? 'SKIPPED' : 'LIVE FACE'}
                 </div>
-                <div className="absolute left-0 right-0 h-0.5 bg-emerald-500 animate-scan-laser" />
+                {appMode !== 'standard' && (
+                  <div className="absolute left-0 right-0 h-0.5 bg-emerald-500 animate-scan-laser" />
+                )}
               </div>
             </div>
 
@@ -1137,7 +1183,7 @@ export default function DocumentScreeningApp() {
               <div className="flex items-center justify-between text-xs font-mono">
                 <span className="text-orange-400 font-semibold flex items-center gap-2">
                   <Cpu className="w-4 h-4 animate-spin text-orange-500" />
-                  RUNNING S-FACE EMBEDDINGS & ELA PIPELINE...
+                  {appMode === 'standard' ? 'RUNNING FORENSIC ELA & OCR ANALYSIS...' : 'RUNNING S-FACE EMBEDDINGS & ELA PIPELINE...'}
                 </span>
                 <span className="text-white font-bold">{processingProgress}%</span>
               </div>
@@ -1309,7 +1355,7 @@ export default function DocumentScreeningApp() {
               <div className="lg:col-span-7 space-y-4">
                 
                 {/* 1:1 Biometric Comparison Card */}
-                {screeningResult.biometricResult && (
+                {screeningResult.biometricResult ? (
                   <div className="matte-card p-4 border border-dark-700 bg-dark-900 space-y-3">
                     <div className="flex items-center justify-between border-b border-dark-700 pb-2">
                       <div className="flex items-center gap-2">
@@ -1409,6 +1455,21 @@ export default function DocumentScreeningApp() {
                         {screeningResult.biometricResult.livenessStatus} ({screeningResult.biometricResult.livenessScore}/100)
                       </span>
                     </div>
+                  </div>
+                ) : (
+                  <div className="matte-card p-4 border border-dark-700 bg-dark-900 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-dark-800 border border-dark-700 flex items-center justify-center text-orange-400">
+                        <FileText className="w-4.5 h-4.5" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-white">Document Only Screening Mode</div>
+                        <div className="text-[11px] text-neutral-400">1:1 Biometric live facial verification was skipped for this session.</div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-dark-800 text-neutral-400 border border-dark-700">
+                      SKIPPED
+                    </span>
                   </div>
                 )}
 
@@ -1554,8 +1615,14 @@ export default function DocumentScreeningApp() {
                         </div>
                       </div>
                     ) : (
-                      <div className="p-6 text-center text-xs text-neutral-400">
-                        No live webcam capture provided. Provide a passenger face snapshot to enable 1:1 facial verification.
+                      <div className="p-6 text-center text-xs text-neutral-400 space-y-2">
+                        <div className="w-10 h-10 rounded-full bg-dark-800 border border-dark-700 flex items-center justify-center mx-auto text-orange-400">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        <div className="font-semibold text-neutral-200">Document Only Screening Mode</div>
+                        <p className="text-[11px] text-neutral-400">
+                          Live facial biometric matching was bypassed for this screening session. Switch to E-Gate Biometric Kiosk mode in the navbar to perform live facial verification.
+                        </p>
                       </div>
                     )}
                   </div>
