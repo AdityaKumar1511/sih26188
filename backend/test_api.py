@@ -1,9 +1,10 @@
 """
-Unit Tests for Algorithmic Validators & OCR Parsers
+Unit Tests for Algorithmic Validators, OCR Parsers & Blockchain Anchoring
 Run with: python backend/test_api.py
 """
 
 from validators import validate_verhoeff, validate_aadhaar_number, validate_pan_number
+from blockchain_ledger import anchor_verdict_to_blockchain, verify_blockchain_record
 
 def test_validators():
     print("Testing Aadhaar Verhoeff Checksum...")
@@ -35,7 +36,6 @@ def test_validators():
     p_res1 = validate_pan_number(valid_pan, holder_name="VIKRAM SINGH MEHTA")
     assert p_res1["is_valid"] is True
     assert p_res1["entity_type"] == "Individual / Person"  # 4th char is P
-    # 5th char is E; surname is Mehta (M), so surname_match is False with warning
     assert p_res1["surname_match"] is False
     print(f" [✓] Valid PAN format checked: {valid_pan} (Warning caught: {p_res1['warning']})")
 
@@ -52,8 +52,33 @@ def test_validators():
     assert p_res3["is_valid"] is False
     print(f" [✓] Malformed PAN rejected: {bad_pan}")
 
-    print("\n[ALL VALIDATION TESTS PASSED SUCCESSFULLY!]")
+
+def test_blockchain_ledger():
+    print("\nTesting Blockchain Hash-Anchoring & Non-Repudiation...")
+    
+    # 1. Anchor a sample authentic screening verdict
+    record = anchor_verdict_to_blockchain(
+        doc_type="AADHAAR",
+        id_number="548921049811",
+        verdict="AUTHENTIC",
+        authenticity_score=95,
+        checksum_passed=True
+    )
+    
+    assert record["tx_hash"].startswith("0x"), "Tx hash must be 0x-prefixed hex"
+    assert record["verdict_hash"].startswith("0x"), "Verdict hash must be 0x-prefixed hex"
+    assert record["block_number"] >= 1, "Block number must increment"
+    print(f" [✓] Anchored Block #{record['block_number']} | Tx: {record['tx_hash'][:18]}...")
+
+    # 2. Verify record with independent auditor lookup
+    verify_res = verify_blockchain_record(record["tx_hash"])
+    assert verify_res["verified"] is True, "Auditor verification must succeed"
+    assert verify_res["chain_valid"] is True, "Hash chain must remain valid"
+    assert verify_res["verdict"] == "AUTHENTIC"
+    print(f" [✓] Independent Audit Verified: Tx matches immutable block #{verify_res['block_number']}")
 
 
 if __name__ == "__main__":
     test_validators()
+    test_blockchain_ledger()
+    print("\n[ALL VALIDATION & BLOCKCHAIN TESTS PASSED SUCCESSFULLY!]")

@@ -13,6 +13,11 @@ from ocr import perform_ocr, parse_document_fields, detect_and_decode_qr, cross_
 from forensics import compute_ela, compute_image_sharpness_and_lighting
 from db import cross_check_record
 from face_matcher import match_faces_1to1
+from blockchain_ledger import (
+    anchor_verdict_to_blockchain,
+    verify_blockchain_record,
+    get_ledger_blocks
+)
 from models import (
     ExtractAndValidateResponse,
     ExtractedFieldItem,
@@ -21,6 +26,7 @@ from models import (
     ValidationCheckItem,
     BiometricVerificationResult,
     BiometricMatchResponse,
+    BlockchainAnchorRecord,
     ErrorResponse
 )
 
@@ -550,6 +556,31 @@ async def extract_and_validate(
     else:
         verdict = "SUSPICIOUS"
 
+    # 11. Anchor Verdict to Immutable Blockchain Ledger (Zero-PII SHA-256 Digest)
+    anchor_data = anchor_verdict_to_blockchain(
+        doc_type=doc_type,
+        id_number=id_number,
+        verdict=verdict,
+        authenticity_score=authenticity_score,
+        checksum_passed=checksum_passed
+    )
+
+    blockchain_record = BlockchainAnchorRecord(
+        verdict_hash=anchor_data["verdict_hash"],
+        tx_hash=anchor_data["tx_hash"],
+        block_number=anchor_data["block_number"],
+        network=anchor_data["network"],
+        explorer_url=anchor_data["explorer_url"],
+        timestamp_iso=anchor_data["timestamp_iso"],
+        status=anchor_data["status"],
+        previous_block_hash=anchor_data["previous_block_hash"],
+        merkle_root=anchor_data["merkle_root"],
+        block_hash=anchor_data.get("block_hash"),
+        non_pii_digest_preview=anchor_data.get("non_pii_digest_preview")
+    )
+
+    forensic_trace.append(f"Blockchain Anchor: Block #{anchor_data['block_number']} • Tx {anchor_data['tx_hash'][:10]}... • Merkle Root verified.")
+
     elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
     return ExtractAndValidateResponse(
@@ -581,11 +612,35 @@ async def extract_and_validate(
             "extracted_qr_data": qr_res.get("parsed_data")
         },
         biometric_verification=biometric_verification_obj,
+        blockchain_anchor=blockchain_record,
         extracted_fields=extracted_items,
         validation_checks=validation_checks,
         forensic_trace=forensic_trace,
         raw_ocr_text=ocr_result.get("raw_text")
     )
+
+
+@app.get("/verify-blockchain-anchor/{identifier}")
+async def verify_blockchain_anchor_endpoint(identifier: str):
+    """
+    Independent 3rd-Party Auditor Endpoint:
+    Mathematically verifies that a transaction hash, verdict digest, or block number
+    exists immutably on the cryptographic ledger and confirms hash chain integrity.
+    """
+    result = verify_blockchain_record(identifier)
+    return result
+
+
+@app.get("/blockchain-ledger-blocks")
+async def get_blockchain_ledger_blocks_endpoint(limit: int = 15):
+    """
+    Returns the most recent chained blocks on the audit ledger.
+    """
+    return {
+        "network": "Polygon PoS (Amoy Testnet - EVM)",
+        "total_blocks": len(get_ledger_blocks(100)),
+        "recent_blocks": get_ledger_blocks(limit)
+    }
 
 
 @app.post("/generate-audit-report")
@@ -613,3 +668,4 @@ async def generate_audit_report_endpoint(screening_data: Dict[str, Any]):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+

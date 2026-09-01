@@ -82,6 +82,20 @@ class BiometricMatchResponse(BaseModel):
     processing_time_ms: float
 
 
+class BlockchainAnchorRecord(BaseModel):
+    verdict_hash: str = Field(..., description="Deterministic Zero-PII SHA-256 Digest of Verdict")
+    tx_hash: str = Field(..., description="EVM Transaction Hash on Public Ledger")
+    block_number: int = Field(..., description="Anchored Block Sequence Number")
+    network: str = Field(..., description="Blockchain Network (e.g., Polygon Amoy / EVM)")
+    explorer_url: str = Field(..., description="Direct Block Explorer Verification URL")
+    timestamp_iso: str
+    status: str = Field(default="CONFIRMED_ON_CHAIN", description="CONFIRMED_ON_CHAIN | PENDING")
+    previous_block_hash: str
+    merkle_root: str
+    block_hash: Optional[str] = None
+    non_pii_digest_preview: Optional[Dict[str, Any]] = None
+
+
 class ExtractAndValidateResponse(BaseModel):
     success: bool
     document_type: str
@@ -93,6 +107,7 @@ class ExtractAndValidateResponse(BaseModel):
     cross_check_result: CrossCheckResult
     qr_verification: Optional[QrVerificationResult] = None
     biometric_verification: Optional[BiometricVerificationResult] = None
+    blockchain_anchor: Optional[BlockchainAnchorRecord] = None
     extracted_fields: List[ExtractedFieldItem]
     validation_checks: List[ValidationCheckItem]
     forensic_trace: List[str]
@@ -103,3 +118,4 @@ class ErrorResponse(BaseModel):
     success: bool = False
     error: str
     details: Optional[str] = None
+
