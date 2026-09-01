@@ -1,3 +1,4 @@
+
 """
 Biometric Face Matching & Anti-Spoofing Liveness Engine
 Smart India Hackathon (SIH PS 26188 - Ministry of Home Affairs)
@@ -45,11 +46,11 @@ def _get_haar_cascade():
 
 
 def _get_yunet_detector(img_w: int = 320, img_h: int = 320):
-    """Initializes OpenCV YuNet Face Detector."""
+    """Initializes and caches OpenCV YuNet Face Detector."""
     global _yunet_detector
-    if os.path.exists(YUNET_PATH) and os.path.getsize(YUNET_PATH) > 10000:
+    if _yunet_detector is None and os.path.exists(YUNET_PATH) and os.path.getsize(YUNET_PATH) > 10000:
         try:
-            detector = cv2.FaceDetectorYN.create(
+            _yunet_detector = cv2.FaceDetectorYN.create(
                 model=YUNET_PATH,
                 config="",
                 input_size=(img_w, img_h),
@@ -57,10 +58,15 @@ def _get_yunet_detector(img_w: int = 320, img_h: int = 320):
                 nms_threshold=0.3,
                 top_k=5000
             )
-            return detector
+            logger.info("YuNet Face Detector initialized.")
         except Exception as e:
             logger.warning(f"YuNet init failed: {e}")
-    return None
+    if _yunet_detector is not None:
+        try:
+            _yunet_detector.setInputSize((img_w, img_h))
+        except Exception as e:
+            logger.warning(f"YuNet setInputSize failed: {e}")
+    return _yunet_detector
 
 
 def _get_sface_recognizer():

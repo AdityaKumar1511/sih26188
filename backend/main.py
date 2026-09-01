@@ -1,19 +1,16 @@
-"""
-FastAPI Server for AI-Based Fake Identity & Document Screening System
-Smart India Hackathon (SIH PS 26188 - Ministry of Home Affairs)
-"""
-
 import time
 import io
 import logging
-from typing import Dict, Any, List, Optional
+import asyncio
+from typing import Dict, Any, List, Optional, Tuple
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from PIL import Image
 
 from validators import validate_aadhaar_number, validate_pan_number, validate_passport_number, parse_mrz_td3
-from ocr import perform_ocr, parse_document_fields
+from ocr import perform_ocr, parse_document_fields, detect_and_decode_qr, cross_verify_qr
+from forensics import compute_ela, compute_image_sharpness_and_lighting
 from db import cross_check_record
 from face_matcher import match_faces_1to1
 from models import (
@@ -44,6 +41,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _run_ocr_and_parsing(image_bytes: bytes) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Synchronous worker that executes OCR and field parsing."""
+    ocr_result = perform_ocr(image_bytes)
+    parsed_fields = parse_document_fields(ocr_result)
+    return ocr_result, parsed_fields
 
 
 @app.get("/")
@@ -87,8 +91,8 @@ async def match_face_endpoint(
                 detail="One or both uploaded image files are empty."
             )
 
-        # Run 1:1 Biometric matching pipeline
-        result = match_faces_1to1(doc_bytes, live_bytes)
+        # Run 1:1 Biometric matching pipeline in thread pool to avoid blocking event loop
+        result = await asyncio.to_thread(match_faces_1to1, doc_bytes, live_bytes)
         elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
         return BiometricMatchResponse(
@@ -128,13 +132,11 @@ async def extract_and_validate(
     """
     Main Screening & Verification Endpoint:
     1. Ingests uploaded image scan (Aadhaar, PAN, Passport, DL).
-    2. Executes OCR with OpenCV preprocessing.
-    3. Extracts structured entity fields (Name, DOB, ID Number, Gender/Father).
-    4. Validates ID numbers algorithmically (Aadhaar 12-digit Verhoeff, PAN, or Passport MRZ).
-    5. Runs Error Level Analysis (ELA) and Image Quality metrics.
-    6. Cross-checks against the Supabase government registry.
-    7. Optionally runs 1:1 Live Biometric Face Matching if passenger camera snapshot is supplied.
-    8. Returns structured verdict, confidence scores, and forensic trace telemetry.
+    2. Concurrently executes independent checks: OCR + parsing, QR detection, ELA & Sharpness, and Biometrics.
+    3. Validates ID numbers algorithmically (Aadhaar 12-digit Verhoeff, PAN, or Passport MRZ).
+    4. Cross-verifies QR payload against OCR fields.
+    5. Cross-checks against the Supabase government registry.
+    6. Returns structured verdict, confidence scores, and forensic trace telemetry.
     """
     start_time = time.perf_counter()
 
@@ -165,16 +167,63 @@ async def extract_and_validate(
             detail="Corrupted or unreadable image file. Please provide a valid JPG or PNG scan."
         )
 
-    # 3. Perform OCR & Entity Parsing
-    try:
-        ocr_result = perform_ocr(contents)
-        parsed_fields = parse_document_fields(ocr_result)
-    except Exception as e:
-        logger.error(f"OCR execution failure: {e}")
+    # Read optional live face bytes
+    live_bytes: Optional[bytes] = None
+    if live_face is not None:
+        try:
+            read_live = await live_face.read()
+            if len(read_live) > 0:
+                live_bytes = read_live
+        except Exception as e:
+            logger.warning(f"Live face read error: {e}")
+
+    # 3. Concurrently execute independent CPU-bound checks (OCR, QR detection, ELA, Sharpness, Face matching)
+    ocr_task = asyncio.to_thread(_run_ocr_and_parsing, contents)
+    qr_task = asyncio.to_thread(detect_and_decode_qr, contents)
+    ela_task = asyncio.to_thread(compute_ela, contents)
+    sharpness_task = asyncio.to_thread(compute_image_sharpness_and_lighting, contents)
+
+    tasks = [ocr_task, qr_task, ela_task, sharpness_task]
+    if live_bytes is not None:
+        tasks.append(asyncio.to_thread(match_faces_1to1, contents, live_bytes))
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Unpack OCR & parsing result
+    ocr_parse_result = results[0]
+    if isinstance(ocr_parse_result, Exception):
+        logger.error(f"OCR execution failure: {ocr_parse_result}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"OCR processing failed: {str(e)}"
+            detail=f"OCR processing failed: {str(ocr_parse_result)}"
         )
+    ocr_result, parsed_fields = ocr_parse_result
+
+    # Unpack QR detection result
+    qr_res = results[1]
+    if isinstance(qr_res, Exception):
+        logger.warning(f"QR detection failed: {qr_res}")
+        qr_res = {"qr_detected": False, "raw_payload": None, "parsed_data": {}, "details": f"QR decoding encountered an error: {str(qr_res)}"}
+
+    # Unpack ELA result
+    ela_res = results[2]
+    if isinstance(ela_res, Exception):
+        logger.warning(f"ELA computation failed: {ela_res}")
+        ela_res = {"ela_score": 75, "mean_error": 0.0, "std_deviation": 0.0, "is_tampered_by_ela": False, "details": "ELA computation could not be evaluated."}
+
+    # Unpack Sharpness result
+    sharp_res = results[3]
+    if isinstance(sharp_res, Exception):
+        logger.warning(f"Sharpness check failed: {sharp_res}")
+        sharp_res = {"sharpness_score": 70, "laplacian_variance": 0.0, "blur_level": "UNKNOWN", "details": "Image sharpness could not be evaluated."}
+
+    # Unpack Biometric matching result (if requested)
+    face_match_res = None
+    if live_bytes is not None and len(results) > 4:
+        face_match_res = results[4]
+        if isinstance(face_match_res, Exception):
+            logger.warning(f"Live face verification encountered an error: {face_match_res}")
+            face_match_res = None
 
     doc_type = parsed_fields.get("doc_type", "UNKNOWN")
     id_number = parsed_fields.get("id_number")
@@ -250,9 +299,7 @@ async def extract_and_validate(
     else:
         forensic_trace.append("WARNING: Unable to locate standard Aadhaar or PAN identifier number.")
 
-    # 5. QR Code Detection & Cross-Verification
-    from ocr import detect_and_decode_qr, cross_verify_qr
-    qr_res = detect_and_decode_qr(contents)
+    # 5. QR Code Cross-Verification (uses pre-detected QR result and OCR parsed fields)
     qr_verify = cross_verify_qr(qr_res, parsed_fields)
 
     if qr_res.get("qr_detected"):
@@ -263,11 +310,7 @@ async def extract_and_validate(
     else:
         forensic_trace.append("Digital QR code: Not detected or unreadable on this canvas.")
 
-    # 6. Forensic Image Analysis (ELA & Sharpness)
-    from forensics import compute_ela, compute_image_sharpness_and_lighting
-    ela_res = compute_ela(contents)
-    sharp_res = compute_image_sharpness_and_lighting(contents)
-
+    # 6. Forensic Image Analysis (ELA & Sharpness) Trace
     if ela_res.get("is_tampered_by_ela"):
         forensic_trace.append(f"CRITICAL: Compression anomaly detected via ELA ({ela_res['details']}). Possible digital splicing.")
     else:
@@ -296,34 +339,31 @@ async def extract_and_validate(
         else:
             forensic_trace.append(f"Registry lookup: ID not found in {db_result['source']} (Unverified record).")
 
-    # 8. Optional Live Biometric Face Matching (if live_face is provided)
+    # 8. Optional Live Biometric Face Matching Process
     biometric_verification_obj: Optional[BiometricVerificationResult] = None
     biometric_score = 0
-    if live_face is not None:
+    if face_match_res is not None and isinstance(face_match_res, dict):
         try:
-            live_bytes = await live_face.read()
-            if len(live_bytes) > 0:
-                face_match_res = match_faces_1to1(contents, live_bytes)
-                if face_match_res.get("success"):
-                    biometric_score = face_match_res.get("match_score", 0)
-                    biometric_verification_obj = BiometricVerificationResult(
-                        is_match=face_match_res.get("is_match", False),
-                        match_score=face_match_res.get("match_score", 0),
-                        cosine_similarity=face_match_res.get("cosine_similarity", 0.0),
-                        l2_distance=face_match_res.get("l2_distance"),
-                        liveness_score=face_match_res.get("liveness_score", 0),
-                        liveness_status=face_match_res.get("liveness_status", "UNKNOWN"),
-                        is_live_person=face_match_res.get("is_live_person", False),
-                        verdict=face_match_res.get("verdict", "UNKNOWN"),
-                        verdict_description=face_match_res.get("verdict_description", ""),
-                        doc_face_crop_base64=face_match_res.get("doc_face_crop_base64"),
-                        live_face_crop_base64=face_match_res.get("live_face_crop_base64"),
-                        doc_face_confidence=face_match_res.get("doc_face_confidence"),
-                        live_face_confidence=face_match_res.get("live_face_confidence")
-                    )
-                    forensic_trace.append(f"Biometric Face Match: {face_match_res['verdict_description']}")
+            if face_match_res.get("success"):
+                biometric_score = face_match_res.get("match_score", 0)
+                biometric_verification_obj = BiometricVerificationResult(
+                    is_match=face_match_res.get("is_match", False),
+                    match_score=face_match_res.get("match_score", 0),
+                    cosine_similarity=face_match_res.get("cosine_similarity", 0.0),
+                    l2_distance=face_match_res.get("l2_distance"),
+                    liveness_score=face_match_res.get("liveness_score", 0),
+                    liveness_status=face_match_res.get("liveness_status", "UNKNOWN"),
+                    is_live_person=face_match_res.get("is_live_person", False),
+                    verdict=face_match_res.get("verdict", "UNKNOWN"),
+                    verdict_description=face_match_res.get("verdict_description", ""),
+                    doc_face_crop_base64=face_match_res.get("doc_face_crop_base64"),
+                    live_face_crop_base64=face_match_res.get("live_face_crop_base64"),
+                    doc_face_confidence=face_match_res.get("doc_face_confidence"),
+                    live_face_confidence=face_match_res.get("live_face_confidence")
+                )
+                forensic_trace.append(f"Biometric Face Match: {face_match_res['verdict_description']}")
         except Exception as e:
-            logger.warning(f"Live face verification encountered an error: {e}")
+            logger.warning(f"Live face object construction error: {e}")
 
     # 9. Build Extracted Fields List
     extracted_items: List[ExtractedFieldItem] = []

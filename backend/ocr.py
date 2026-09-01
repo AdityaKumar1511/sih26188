@@ -5,6 +5,7 @@ Extracts Aadhaar, PAN, and Indian Passport with high precision and watermark fil
 """
 
 import io
+import os
 import re
 import logging
 from typing import Dict, Any, List, Optional, Tuple
@@ -13,26 +14,35 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Try importing cv2, pytesseract, easyocr
+# Optional dependencies (OpenCV, Pytesseract, EasyOCR)
 try:
-    import cv2
+    import cv2  # type: ignore
 except ImportError:
     cv2 = None
 
 try:
-    import pytesseract
+    import pytesseract  # type: ignore
+    # Auto-detect Tesseract executable path on Windows if not already in PATH
+    for t_cmd in [
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Tesseract-OCR\tesseract.exe"),
+        os.path.expandvars(r"%USERPROFILE%\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"),
+    ]:
+        if os.path.exists(t_cmd):
+            pytesseract.tesseract_cmd = t_cmd
+            break
 except ImportError:
     pytesseract = None
 
+_easyocr_reader: Optional[Any] = None
 try:
-    import easyocr
-    _easyocr_reader = None
+    import easyocr  # type: ignore
 except ImportError:
     easyocr = None
-    _easyocr_reader = None
 
 
-def get_easyocr_reader():
+def get_easyocr_reader() -> Any:
     global _easyocr_reader
     if easyocr is not None and _easyocr_reader is None:
         try:
@@ -96,48 +106,93 @@ def perform_ocr(image_bytes: bytes) -> Dict[str, Any]:
 
     if pytesseract is not None:
         try:
+            txt1, txt2, txt3 = "", "", ""
             # Pass 1: CLAHE image with PSM 6 (best for identity card layouts)
             clahe_img = next((img for label, img in preprocessed_images if label == "clahe"), raw_pil)
             txt1 = pytesseract.image_to_string(clahe_img, lang='eng', config='--psm 6').strip()
+            
+            pass1_ocr_data = []
+            avg_word_conf = 0.0
             if txt1:
                 all_texts.append(txt1)
                 best_text = txt1
                 engine_used = "tesseract"
 
-            # Pass 2: Raw / Grayscale image with PSM 3 (auto segmentation)
-            txt2 = pytesseract.image_to_string(raw_pil, lang='eng', config='--psm 3').strip()
-            if txt2:
-                all_texts.append(txt2)
-                if len(txt2) > len(best_text):
-                    best_text = txt2
-                    engine_used = "tesseract"
+                # Extract word bounding boxes and confidences from CLAHE image
+                try:
+                    data_dict = pytesseract.image_to_data(clahe_img, output_type=pytesseract.Output.DICT)
+                    word_confs = []
+                    for i in range(len(data_dict['text'])):
+                        t = data_dict['text'][i].strip()
+                        conf = int(data_dict['conf'][i])
+                        if t and conf > 15:
+                            pass1_ocr_data.append({
+                                "text": t,
+                                "conf": conf,
+                                "left": data_dict['left'][i],
+                                "top": data_dict['top'][i],
+                                "width": data_dict['width'][i],
+                                "height": data_dict['height'][i]
+                            })
+                            word_confs.append(conf)
+                    if word_confs:
+                        avg_word_conf = sum(word_confs) / len(word_confs)
+                except Exception as e:
+                    logger.debug(f"image_to_data error in Pass 1: {e}")
 
-            # Pass 3: Thresholded image with PSM 6 (great for MRZ / stamped text)
-            thresh_img = next((img for label, img in preprocessed_images if label == "threshold"), None)
-            if thresh_img:
-                txt3 = pytesseract.image_to_string(thresh_img, lang='eng', config='--psm 6').strip()
-                if txt3:
-                    all_texts.append(txt3)
-                    if len(txt3) > len(best_text):
-                        best_text = txt3
+            ocr_data = pass1_ocr_data
 
-            # Extract word bounding boxes and confidences from CLAHE image
-            try:
-                data_dict = pytesseract.image_to_data(clahe_img, output_type=pytesseract.Output.DICT)
-                for i in range(len(data_dict['text'])):
-                    t = data_dict['text'][i].strip()
-                    conf = int(data_dict['conf'][i])
-                    if t and conf > 15:
-                        ocr_data.append({
-                            "text": t,
-                            "conf": conf,
-                            "left": data_dict['left'][i],
-                            "top": data_dict['top'][i],
-                            "width": data_dict['width'][i],
-                            "height": data_dict['height'][i]
-                        })
-            except Exception:
-                pass
+            # Early Exit Check: If Pass 1 produced substantial text with high confidence, skip Passes 2 & 3
+            if len(txt1) > 40 and avg_word_conf >= 70:
+                logger.info(
+                    f"OCR Pass 1 produced clean result ({len(txt1)} chars, avg conf: {avg_word_conf:.1f}%). "
+                    f"Early exit triggered — skipping Passes 2 & 3."
+                )
+            else:
+                logger.info(
+                    f"OCR Pass 1 result ({len(txt1)} chars, avg conf: {avg_word_conf:.1f}%) below threshold. "
+                    f"Executing multi-pass OCR (Passes 2 & 3)."
+                )
+                # Pass 2: Raw / Grayscale image with PSM 3 (auto segmentation)
+                txt2 = pytesseract.image_to_string(raw_pil, lang='eng', config='--psm 3').strip()
+                if txt2:
+                    all_texts.append(txt2)
+                    if len(txt2) > len(best_text):
+                        best_text = txt2
+                        engine_used = "tesseract"
+
+                # Pass 3: Thresholded image with PSM 6 (great for MRZ / stamped text)
+                thresh_img = next((img for label, img in preprocessed_images if label == "threshold"), None)
+                if thresh_img:
+                    txt3 = pytesseract.image_to_string(thresh_img, lang='eng', config='--psm 6').strip()
+                    if txt3:
+                        all_texts.append(txt3)
+                        if len(txt3) > len(best_text):
+                            best_text = txt3
+                            engine_used = "tesseract"
+
+                # If a later pass yielded the best text, extract word boxes from that image
+                if best_text and (not ocr_data or best_text != txt1):
+                    try:
+                        target_img = thresh_img if (thresh_img is not None and best_text == txt3) else (raw_pil if best_text == txt2 else clahe_img)
+                        data_dict = pytesseract.image_to_data(target_img, output_type=pytesseract.Output.DICT)
+                        new_ocr_data = []
+                        for i in range(len(data_dict['text'])):
+                            t = data_dict['text'][i].strip()
+                            conf = int(data_dict['conf'][i])
+                            if t and conf > 15:
+                                new_ocr_data.append({
+                                    "text": t,
+                                    "conf": conf,
+                                    "left": data_dict['left'][i],
+                                    "top": data_dict['top'][i],
+                                    "width": data_dict['width'][i],
+                                    "height": data_dict['height'][i]
+                                })
+                        if new_ocr_data:
+                            ocr_data = new_ocr_data
+                    except Exception:
+                        pass
 
         except Exception as e:
             logger.warning(f"Pytesseract failed: {e}")
