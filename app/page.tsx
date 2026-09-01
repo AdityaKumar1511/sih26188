@@ -320,8 +320,15 @@ const SAMPLE_PRESETS: SamplePreset[] = [
 // LIVE FASTAPI BACKEND INTEGRATION & PDF EXPORT
 // ============================================================================
 
-const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://sih26188-naq6.onrender.com';
-const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
+function getApiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, '');
+  }
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return 'http://localhost:8000';
+  }
+  return 'https://sih26188-naq6.onrender.com';
+}
 
 async function analyzeDocumentWithBiometrics(
   docFileInput: File | SamplePreset,
@@ -340,8 +347,10 @@ async function analyzeDocumentWithBiometrics(
     formData.append('live_face', liveFaceInput);
   }
 
+  const baseUrl = getApiBaseUrl();
+
   try {
-    const response = await fetch(`${API_BASE_URL}/extract-and-validate`, {
+    const response = await fetch(`${baseUrl}/extract-and-validate`, {
       method: 'POST',
       body: formData,
     });
@@ -432,11 +441,12 @@ async function analyzeDocumentWithBiometrics(
     };
   } catch (error: any) {
     console.error('Backend connection failed:', error);
-    throw new Error(error.message || 'Could not connect to FastAPI screening engine at ' + API_BASE_URL);
+    throw new Error(error.message || 'Could not connect to FastAPI screening engine at ' + baseUrl);
   }
 }
 
 async function exportPdfAuditReport(screeningResult: ScreeningResult) {
+  const baseUrl = getApiBaseUrl();
   try {
     const payload = {
       document_type: screeningResult.documentType,
@@ -464,7 +474,7 @@ async function exportPdfAuditReport(screeningResult: ScreeningResult) {
       forensic_trace: screeningResult.forensicTrace
     };
 
-    const response = await fetch(`${API_BASE_URL}/generate-audit-report`, {
+    const response = await fetch(`${baseUrl}/generate-audit-report`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -541,7 +551,17 @@ export default function DocumentScreeningApp() {
     'Cross-Checking Government Database & Checksums...'
   ];
 
-  // Clean up object URLs
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+
+  // Camera stream attachment when video element mounts
+  useEffect(() => {
+    if (isCameraActive && videoRef.current && mediaStreamRef.current) {
+      videoRef.current.srcObject = mediaStreamRef.current;
+      videoRef.current.play().catch((err) => console.error('Video play error:', err));
+    }
+  }, [isCameraActive]);
+
+  // Clean up object URLs and camera on unmount
   useEffect(() => {
     return () => {
       if (imagePreviewUrl && imagePreviewUrl.startsWith('blob:')) URL.revokeObjectURL(imagePreviewUrl);
@@ -558,11 +578,8 @@ export default function DocumentScreeningApp() {
         video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
         audio: false
       });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        setIsCameraActive(true);
-      }
+      mediaStreamRef.current = stream;
+      setIsCameraActive(true);
     } catch (err: any) {
       console.error('Camera access error:', err);
       setCameraError('Webcam access was denied or not available. You can upload a passenger photo instead.');
@@ -571,12 +588,15 @@ export default function DocumentScreeningApp() {
   };
 
   const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
     setIsCameraActive(false);
+    setCountdown(null);
   };
 
   const captureSnapshot = () => {
@@ -584,11 +604,13 @@ export default function DocumentScreeningApp() {
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    const width = video.videoWidth || 640;
+    const height = video.videoHeight || 480;
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, 0, 0, width, height);
       canvas.toBlob((blob) => {
         if (blob) {
           const file = new File([blob], 'passenger_live_snapshot.jpg', { type: 'image/jpeg' });
@@ -646,6 +668,30 @@ export default function DocumentScreeningApp() {
   const handleStartScreening = async () => {
     if (!selectedFile && !selectedPreset) return;
 
+    let currentLiveFace = liveFaceFile;
+    if (isCameraActive && videoRef.current && canvasRef.current && !currentLiveFace) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const width = video.videoWidth || 640;
+      const height = video.videoHeight || 480;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, width, height);
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92)
+        );
+        if (blob) {
+          const file = new File([blob], 'passenger_live_snapshot.jpg', { type: 'image/jpeg' });
+          setLiveFaceFile(file);
+          setLiveFacePreviewUrl(URL.createObjectURL(file));
+          currentLiveFace = file;
+        }
+      }
+      stopCamera();
+    }
+
     setAppState('processing');
     setProcessingProgress(10);
     setCurrentStepIndex(0);
@@ -674,7 +720,7 @@ export default function DocumentScreeningApp() {
       const input = selectedPreset || selectedFile!;
       const result = await analyzeDocumentWithBiometrics(
         input,
-        appMode === 'standard' ? null : liveFaceFile
+        appMode === 'standard' ? null : currentLiveFace
       );
 
       if (appMode === 'standard' && result.biometricResult) {
