@@ -622,8 +622,9 @@ export default function DocumentScreeningApp() {
   const handleVerifyOnChain = async (identifier: string) => {
     setIsVerifyingOnChain(true);
     setChainVerificationResult(null);
+    const baseUrl = getApiBaseUrl();
     try {
-      const res = await fetch(`${API_BASE_URL}/verify-blockchain-anchor/${identifier}`);
+      const res = await fetch(`${baseUrl}/verify-blockchain-anchor/${identifier}`);
       if (res.ok) {
         const json = await res.json();
         setChainVerificationResult(json);
@@ -654,8 +655,9 @@ export default function DocumentScreeningApp() {
   const handleFetchChainBlocks = async () => {
     setIsChainModalOpen(true);
     setIsLoadingBlocks(true);
+    const baseUrl = getApiBaseUrl();
     try {
-      const res = await fetch(`${API_BASE_URL}/blockchain-ledger-blocks?limit=10`);
+      const res = await fetch(`${baseUrl}/blockchain-ledger-blocks?limit=10`);
       if (res.ok) {
         const json = await res.json();
         setChainBlocks(json.recent_blocks || []);
