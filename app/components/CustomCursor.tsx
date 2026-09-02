@@ -22,6 +22,10 @@ export default function CustomCursor() {
       mousePos.current = { x: e.clientX, y: e.clientY };
       if (!isVisible) setIsVisible(true);
 
+      // Update CSS variables for interactive grid spotlight
+      document.documentElement.style.setProperty('--mouse-x', `${e.clientX}px`);
+      document.documentElement.style.setProperty('--mouse-y', `${e.clientY}px`);
+
       // Check if hovering over links, buttons, or interactive elements
       const target = e.target as HTMLElement | null;
       if (target) {
@@ -69,22 +73,31 @@ export default function CustomCursor() {
   }, [isVisible]);
 
   return (
-    <div
-      ref={cursorRef}
-      className={`fixed top-0 left-0 pointer-events-none z-[99999] will-change-transform transition-opacity duration-300 ${
-        isVisible ? 'opacity-100' : 'opacity-0'
-      }`}
-      aria-hidden="true"
-    >
+    <>
+      {/* Dynamic Cursor Spotlight Grid Layer (Illuminates background grid around mouse) */}
       <div
-        className={`-translate-x-1/2 -translate-y-1/2 rounded-full transition-all duration-200 ease-out flex items-center justify-center ${
-          isHovered
-            ? 'w-14 h-14 border border-orange-500 bg-orange-500/15 shadow-[0_0_24px_rgba(249,115,22,0.35)] scale-100'
-            : isClicked
-            ? 'w-6 h-6 border-2 border-orange-400 bg-orange-500/30 scale-75'
-            : 'w-7 h-7 border border-orange-500/80 bg-orange-500/10 shadow-[0_0_12px_rgba(249,115,22,0.2)]'
-        }`}
+        className={`grid-spotlight ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+        aria-hidden="true"
       />
-    </div>
+
+      {/* Sleek Custom Circle Cursor */}
+      <div
+        ref={cursorRef}
+        className={`fixed top-0 left-0 pointer-events-none z-[99999] will-change-transform transition-opacity duration-300 ${
+          isVisible ? 'opacity-100' : 'opacity-0'
+        }`}
+        aria-hidden="true"
+      >
+        <div
+          className={`-translate-x-1/2 -translate-y-1/2 rounded-full transition-all duration-200 ease-out flex items-center justify-center ${
+            isHovered
+              ? 'w-14 h-14 border border-orange-500 bg-orange-500/15 shadow-[0_0_24px_rgba(249,115,22,0.35)] scale-100'
+              : isClicked
+              ? 'w-6 h-6 border-2 border-orange-400 bg-orange-500/30 scale-75'
+              : 'w-7 h-7 border border-orange-500/80 bg-orange-500/10 shadow-[0_0_12px_rgba(249,115,22,0.2)]'
+          }`}
+        />
+      </div>
+    </>
   );
 }
