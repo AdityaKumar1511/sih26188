@@ -7,9 +7,10 @@ Extracts Aadhaar, PAN, and Indian Passport with high precision and watermark fil
 import io
 import os
 import re
+import shutil
 import logging
 from typing import Dict, Any, List, Optional, Tuple
-from PIL import Image
+from PIL import Image, ImageOps
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -22,42 +23,60 @@ except ImportError:
 
 try:
     import pytesseract  # type: ignore
-    # Auto-detect Tesseract executable path on Windows if not already in PATH
-    for t_cmd in [
+    # Auto-detect Tesseract executable path on Windows, Linux, and macOS
+    _tesseract_candidates = [
+        os.environ.get("TESSERACT_CMD"),
+        shutil.which("tesseract"),
         r"C:\Program Files\Tesseract-OCR\tesseract.exe",
         r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
         os.path.expandvars(r"%LOCALAPPDATA%\Programs\Tesseract-OCR\tesseract.exe"),
         os.path.expandvars(r"%USERPROFILE%\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"),
-    ]:
-        if os.path.exists(t_cmd):
-            pytesseract.tesseract_cmd = t_cmd
+        r"C:\tools\tesseract\tesseract.exe",
+        "/usr/bin/tesseract",
+        "/usr/local/bin/tesseract",
+        "/opt/homebrew/bin/tesseract",
+    ]
+    for _t_cmd in _tesseract_candidates:
+        if _t_cmd and os.path.exists(_t_cmd):
+            pytesseract.tesseract_cmd = _t_cmd
+            pytesseract.pytesseract.tesseract_cmd = _t_cmd
+            _tess_dir = os.path.dirname(_t_cmd)
+            if _tess_dir not in os.environ.get("PATH", ""):
+                os.environ["PATH"] = _tess_dir + os.pathsep + os.environ.get("PATH", "")
+            _tessdata_path = os.path.join(_tess_dir, "tessdata")
+            if os.path.exists(_tessdata_path) and "TESSDATA_PREFIX" not in os.environ:
+                os.environ["TESSDATA_PREFIX"] = _tessdata_path
+            logger.info(f"Tesseract OCR configured at: {_t_cmd}")
             break
 except ImportError:
     pytesseract = None
 
 _easyocr_reader: Optional[Any] = None
-try:
-    import easyocr  # type: ignore
-except ImportError:
-    easyocr = None
 
 
 def get_easyocr_reader() -> Any:
     global _easyocr_reader
-    if easyocr is not None and _easyocr_reader is None:
+    if _easyocr_reader is None:
         try:
+            import easyocr  # type: ignore
             _easyocr_reader = easyocr.Reader(['en', 'hi'], gpu=False)
         except Exception as e:
-            logger.warning(f"EasyOCR reader init failed: {e}")
+            logger.debug(f"EasyOCR reader init skipped or failed: {e}")
     return _easyocr_reader
 
 
 def preprocess_image(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
     """
     Applies optimized, high-performance image enhancement pipelines.
-    Returns 3 key representations to maximize accuracy without latency overhead.
+    Handles EXIF orientation, contrast stretching, CLAHE, adaptive thresholding, and denoising.
     """
-    pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    try:
+        pil_image = Image.open(io.BytesIO(image_bytes))
+        pil_image = ImageOps.exif_transpose(pil_image)
+        pil_image = pil_image.convert("RGB")
+    except Exception:
+        pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+
     results: List[Tuple[str, Image.Image]] = [("raw", pil_image)]
 
     if cv2 is None:
@@ -66,14 +85,21 @@ def preprocess_image(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
     open_cv_image = np.array(pil_image)
     open_cv_image = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2BGR)
 
-    # 1. Resize if image is small
+    # 1. Resize if image is too small or excessively large
     h, w = open_cv_image.shape[:2]
     if w < 1200:
-        scale_factor = 1200 / w
+        scale_factor = 1200 / max(w, 1)
         open_cv_image = cv2.resize(
             open_cv_image,
             (int(w * scale_factor), int(h * scale_factor)),
             interpolation=cv2.INTER_CUBIC
+        )
+    elif w > 3200:
+        scale_factor = 2400 / w
+        open_cv_image = cv2.resize(
+            open_cv_image,
+            (int(w * scale_factor), int(h * scale_factor)),
+            interpolation=cv2.INTER_AREA
         )
 
     # 2. Grayscale & CLAHE (Contrast-Limited Adaptive Histogram Equalization)
@@ -82,11 +108,19 @@ def preprocess_image(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
     clahe_img = clahe.apply(gray)
     results.append(("clahe", Image.fromarray(clahe_img)))
 
-    # 3. Adaptive Threshold (for crisp text contours)
+    # 3. Bilateral Filter Denoised + CLAHE (Sharp text contours without background noise)
+    denoised = cv2.bilateralFilter(clahe_img, 9, 75, 75)
+    results.append(("denoised", Image.fromarray(denoised)))
+
+    # 4. Adaptive Threshold (for crisp text contours)
     thresh = cv2.adaptiveThreshold(
         clahe_img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 8
     )
     results.append(("threshold", Image.fromarray(thresh)))
+
+    # 5. Otsu thresholding (good for MRZ and high-contrast lines)
+    _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    results.append(("otsu", Image.fromarray(otsu)))
 
     return results
 
@@ -97,7 +131,7 @@ def perform_ocr(image_bytes: bytes) -> Dict[str, Any]:
     Uses PSM 6 (uniform block) and PSM 3 (auto page segmentation).
     """
     preprocessed_images = preprocess_image(image_bytes)
-    raw_pil = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    raw_pil = preprocessed_images[0][1]
 
     best_text = ""
     all_texts: List[str] = []
@@ -337,7 +371,15 @@ def _extract_best_name(lines: List[str], dob_line_idx: int, all_texts: List[str]
     # 2. Lines following explicit Name / Given Name labels
     for i, line in enumerate(lines):
         upper = line.upper().strip()
-        if re.search(r'\b(GIVEN\s*NAME|GIVEN\s*NAMES|NAME|FULL\s*NAME)\b', upper):
+        # Direct line pattern: Name: <Candidate>
+        name_label_match = re.search(r'\b(?:NAME|FULL\s*NAME|GIVEN\s*NAME|GIVEN\s*NAMES|नाम)\s*[:\-]?\s*(.+)', upper)
+        if name_label_match:
+            cand_inline = _clean_name_candidate(name_label_match.group(1))
+            s_inline = _score_name_candidate(cand_inline)
+            if s_inline > 0:
+                candidates.append((cand_inline, s_inline + 40))
+
+        if re.search(r'\b(GIVEN\s*NAME|GIVEN\s*NAMES|NAME|FULL\s*NAME|नाम)\b', upper):
             if i + 1 < len(lines):
                 raw = lines[i + 1]
                 if not _is_header_or_noise(raw):
@@ -364,6 +406,156 @@ def _extract_best_name(lines: List[str], dob_line_idx: int, all_texts: List[str]
 
 
 # ==============================================================================
+# OCR ERROR REPAIR HELPERS
+# ==============================================================================
+
+def _repair_aadhaar_ocr(raw_text: str) -> Optional[str]:
+    """
+    Attempts to detect and repair 12-digit Aadhaar candidates with common OCR digit confusions.
+    Verifies with Verhoeff checksum if available.
+    """
+    from validators import validate_verhoeff
+
+    # Standard pattern
+    standard_match = re.search(r'\b([2-9]\d{3})\s?(\d{4})\s?(\d{4})\b', raw_text)
+    if standard_match:
+        digits = "".join(standard_match.groups())
+        if len(digits) == 12 and validate_verhoeff(digits):
+            return f"{digits[0:4]} {digits[4:8]} {digits[8:12]}"
+
+    # Look for 12-char alphanumeric tokens that could be OCR-corrupted Aadhaar
+    char_to_digit = {'O': '0', 'o': '0', 'D': '0', 'I': '1', 'l': '1', '|': '1', 'Z': '2', 'z': '2', 'S': '5', 's': '5', 'B': '8'}
+    tokens = re.findall(r'[0-9A-Za-z|]{4}[\s\-]?[0-9A-Za-z|]{4}[\s\-]?[0-9A-Za-z|]{4}', raw_text)
+    for token in tokens:
+        cleaned = re.sub(r'[\s\-]', '', token)
+        if len(cleaned) == 12:
+            repaired = "".join(char_to_digit.get(ch, ch) for ch in cleaned)
+            if repaired.isdigit() and repaired[0] not in ('0', '1'):
+                if validate_verhoeff(repaired):
+                    return f"{repaired[0:4]} {repaired[4:8]} {repaired[8:12]}"
+
+    if standard_match:
+        digits = "".join(standard_match.groups())
+        return f"{digits[0:4]} {digits[4:8]} {digits[8:12]}"
+
+    return None
+
+
+def _repair_pan_ocr(raw_text: str) -> Optional[str]:
+    """
+    Detects and repairs 10-character PAN cards: 5 letters, 4 digits, 1 letter (e.g. ABCPE1234F).
+    """
+    # 1. Exact regex match
+    match = re.search(r'\b([A-Z]{5}[0-9]{4}[A-Z])\b', raw_text.upper())
+    if match:
+        return match.group(1)
+
+    # 2. Fuzzy repair for 10-character alphanumeric tokens
+    digit_to_char = {'0': 'O', '1': 'I', '2': 'Z', '5': 'S', '8': 'B'}
+    char_to_digit = {'O': '0', 'I': '1', 'l': '1', 'Z': '2', 'S': '5', 'B': '8', 'D': '0'}
+
+    tokens = re.findall(r'\b[A-Za-z0-9]{10}\b', raw_text)
+    for token in tokens:
+        token_upper = token.upper()
+        # Positions 0-4: must be letters
+        part1 = "".join(digit_to_char.get(ch, ch) for ch in token_upper[:5])
+        # Positions 5-8: must be digits
+        part2 = "".join(char_to_digit.get(ch, ch) for ch in token_upper[5:9])
+        # Position 9: must be letter
+        part3 = digit_to_char.get(token_upper[9], token_upper[9])
+
+        candidate = f"{part1}{part2}{part3}"
+        if re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]$', candidate):
+            if candidate[3] in "CPHFATBLJG":
+                return candidate
+
+    return None
+
+
+def _repair_passport_ocr(raw_text: str) -> Optional[str]:
+    """
+    Detects and repairs 8-character Indian Passport number: 1 letter + 7 digits (e.g. Z1234567).
+    """
+    upper = raw_text.upper()
+
+    digit_to_char = {'0': 'O', '1': 'I', '2': 'Z', '5': 'S', '8': 'B', '7': 'T', '6': 'G'}
+    char_to_digit = {'O': '0', 'I': '1', 'l': '1', 'Z': '2', 'S': '5', 'B': '8', 'D': '0'}
+
+    # 1. Label match (PASSPORT NO / PASSPORT NUMBER)
+    label_match = re.search(r'PASSPORT\s*(?:NO|NUMBER)?[\s\.\:\-]*([A-Z0-9]{8})\b', upper)
+    if label_match:
+        cand = label_match.group(1)
+        first_char = digit_to_char.get(cand[0], cand[0])
+        rest_digits = "".join(char_to_digit.get(ch, ch) for ch in cand[1:])
+        fixed = f"{first_char}{rest_digits}"
+        if re.match(r'^[A-Z]\d{7}$', fixed):
+            return fixed
+
+    # 2. Exact standard format (1 letter + 7 digits)
+    match = re.search(r'\b([A-Z]\d{7})\b', upper)
+    if match:
+        return match.group(1)
+
+    # 3. Fuzzy repair for 8-char tokens
+    tokens = re.findall(r'\b[A-Za-z0-9]{8}\b', upper)
+    for token in tokens:
+        first = digit_to_char.get(token[0], token[0])
+        rest = "".join(char_to_digit.get(ch, ch) for ch in token[1:])
+        candidate = f"{first}{rest}"
+        if re.match(r'^[A-Z]\d{7}$', candidate):
+            return candidate
+
+    return None
+
+
+def _parse_dob(all_text: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Extracts Date of Birth (and Expiry Date if present) across multiple formats:
+    - DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY
+    - YYYY-MM-DD, YYYY/MM/DD
+    - DD Mon YYYY / DD Month YYYY (e.g. 14 Aug 1988)
+    - Year of Birth: YYYY / जन्म वर्ष: YYYY
+    """
+    dob_val = None
+    expiry_val = None
+
+    # Standard numeric date: DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+    d_regex = r'\b(0[1-9]|[12][0-9]|3[01])[\/\-\.](0[1-9]|1[012])[\/\-\.](19\d\d|20\d\d)\b'
+    matches = list(re.finditer(d_regex, all_text))
+    if matches:
+        first_m = matches[0]
+        dob_val = f"{first_m.group(1)}/{first_m.group(2)}/{first_m.group(3)}"
+        if len(matches) >= 2:
+            sec_m = matches[-1]
+            expiry_val = f"{sec_m.group(1)}/{sec_m.group(2)}/{sec_m.group(3)}"
+
+    # Textual month format: 14 Aug 1988 or 14-Aug-1988 or 14 August 1988
+    if not dob_val:
+        month_map = {
+            'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
+            'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12',
+            'JANUARY': '01', 'FEBRUARY': '02', 'MARCH': '03', 'APRIL': '04', 'JUNE': '06',
+            'JULY': '07', 'AUGUST': '08', 'SEPTEMBER': '09', 'OCTOBER': '10', 'NOVEMBER': '11', 'DECEMBER': '12'
+        }
+        text_d_regex = r'\b(0?[1-9]|[12][0-9]|3[01])[\s\-\/\.]([A-Za-z]{3,9})[\s\-\/\.](19\d\d|20\d\d)\b'
+        t_matches = list(re.finditer(text_d_regex, all_text))
+        for tm in t_matches:
+            mon_str = tm.group(2).upper()
+            if mon_str in month_map:
+                day_str = tm.group(1).zfill(2)
+                dob_val = f"{day_str}/{month_map[mon_str]}/{tm.group(3)}"
+                break
+
+    # Year of birth only fallback: e.g. Year of Birth: 1988 or YOB : 1988 or जन्म वर्ष: 1988
+    if not dob_val:
+        yob_match = re.search(r'(?:YEAR\s*OF\s*BIRTH|YOB|DOB|जन्म\s*वर्ष|जन्म\s*तिथि)\s*[:\-]?\s*(19\d\d|20\d\d)', all_text, re.IGNORECASE)
+        if yob_match:
+            dob_val = f"01/01/{yob_match.group(1)}"
+
+    return dob_val, expiry_val
+
+
+# ==============================================================================
 # DOCUMENT CLASSIFICATION & FIELD PARSER
 # ==============================================================================
 
@@ -380,7 +572,6 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
     upper_combined = all_text_combined.upper()
 
     # --- 1. Detect Document Type ---
-    # Passport signals: Republic of India, Passport, Type P, Country Code IND, MRZ (P<IND)
     is_passport = any(k in upper_combined for k in [
         "REPUBLIC OF INDIA", "PASSPORT", "PASSEPORT", "TYPE P", "COUNTRY CODE IND",
         "P<IND", "GIVEN NAME", "PLACE OF BIRTH", "PLACE OF ISSUE", "DATE OF EXPIRY",
@@ -388,33 +579,30 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
     ])
 
     is_aadhaar = any(k in upper_combined for k in [
-        "AADHAAR", "UIDAI", "ENROLMENT", "MERA AADHAAR", "MERI PEHCHAN", "BHARAT SARKAR", "UNIQUE IDENTIFICATION"
+        "AADHAAR", "UIDAI", "ENROLMENT", "MERA AADHAAR", "MERI PEHCHAN", "BHARAT SARKAR", "UNIQUE IDENTIFICATION",
+        "आम आदमी का अधिकार", "भारत सरकार"
     ])
 
     is_pan = any(k in upper_combined for k in [
-        "INCOME TAX", "PERMANENT ACCOUNT NUMBER", "INCOMETAX", "ACCOUNT NUMBER CARD"
+        "INCOME TAX", "PERMANENT ACCOUNT NUMBER", "INCOMETAX", "ACCOUNT NUMBER CARD", "आयकर विभाग", "PAN CARD"
     ])
 
-    # Regex patterns
-    aadhaar_pattern = r'\b[2-9]\d{3}\s?\d{4}\s?\d{4}\b'
-    pan_pattern = r'\b[A-Z]{5}[0-9]{4}[A-Z]\b'
-    passport_pattern = r'\b[A-Z]\d{7}\b'
-
-    has_aadhaar_num = re.search(aadhaar_pattern, all_text_combined)
-    has_pan_num = re.search(pan_pattern, upper_combined)
-    has_passport_num = re.search(passport_pattern, upper_combined)
+    # Check for repaired ID numbers
+    repaired_aadhaar = _repair_aadhaar_ocr(all_text_combined)
+    repaired_pan = _repair_pan_ocr(all_text_combined)
+    repaired_passport = _repair_passport_ocr(all_text_combined)
 
     # Check for MRZ line in passport (e.g. P<IND...)
-    has_mrz_line = bool(re.search(r'P\s*<\s*IND', upper_combined) or re.search(r'P<[A-Z]{3}', upper_combined))
+    has_mrz_line = bool(re.search(r'P\s*[<c«\(]\s*IND', upper_combined) or re.search(r'P[<c«\(][A-Z]{3}', upper_combined))
 
     doc_type = "UNKNOWN"
     if is_passport or has_mrz_line:
         doc_type = "PASSPORT"
-    elif is_aadhaar or (has_aadhaar_num and not is_pan):
+    elif is_aadhaar or (repaired_aadhaar and not is_pan):
         doc_type = "AADHAAR"
-    elif is_pan or has_pan_num:
+    elif is_pan or repaired_pan:
         doc_type = "PAN"
-    elif has_passport_num and not has_aadhaar_num:
+    elif repaired_passport and not repaired_aadhaar:
         doc_type = "PASSPORT"
 
     extracted: Dict[str, Any] = {
@@ -452,55 +640,44 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
         return default_fallback
 
     # --- 2. Extract ID Numbers ---
-    if doc_type == "AADHAAR" or (has_aadhaar_num and doc_type != "PASSPORT"):
-        match = re.search(aadhaar_pattern, all_text_combined)
-        if match:
-            clean = re.sub(r'\s+', '', match.group(0))
-            if len(clean) == 12:
-                extracted["id_number"] = f"{clean[0:4]} {clean[4:8]} {clean[8:12]}"
-                extracted["confidence_scores"]["id_number"] = get_real_confidence(clean, 90)
+    if doc_type == "AADHAAR" or (repaired_aadhaar and doc_type != "PASSPORT"):
+        if repaired_aadhaar:
+            extracted["id_number"] = repaired_aadhaar
+            extracted["confidence_scores"]["id_number"] = get_real_confidence(repaired_aadhaar, 92)
 
-    elif doc_type == "PAN" or has_pan_num:
-        match = re.search(pan_pattern, upper_combined)
-        if match:
-            extracted["id_number"] = match.group(0)
-            extracted["confidence_scores"]["id_number"] = get_real_confidence(match.group(0), 90)
+    elif doc_type == "PAN" or repaired_pan:
+        if repaired_pan:
+            extracted["id_number"] = repaired_pan
+            extracted["confidence_scores"]["id_number"] = get_real_confidence(repaired_pan, 92)
 
-    elif doc_type == "PASSPORT" or has_passport_num:
-        # Search specifically for 1 letter + 7 digits
-        pp_match = re.search(r'\b([A-Z]\d{7})\b', upper_combined)
-        if pp_match:
-            extracted["id_number"] = pp_match.group(1)
-            extracted["confidence_scores"]["id_number"] = get_real_confidence(pp_match.group(1), 92)
+    elif doc_type == "PASSPORT" or repaired_passport:
+        if repaired_passport:
+            extracted["id_number"] = repaired_passport
+            extracted["confidence_scores"]["id_number"] = get_real_confidence(repaired_passport, 92)
 
     # --- 3. Extract Dates (DOB & Expiry) ---
-    dob_pattern = r'\b(0[1-9]|[12][0-9]|3[01])[-/.](0[1-9]|1[012])[-/.](19|20)\d\d\b'
-    all_dates = list(re.finditer(dob_pattern, all_text_combined))
-    
+    parsed_dob, parsed_expiry = _parse_dob(all_text_combined)
     dob_line_idx = -1
-    if all_dates:
-        # First date is usually DOB (or look for explicit DOB prefix)
-        dob_val = all_dates[0].group(0)
-        extracted["dob"] = dob_val
-        extracted["confidence_scores"]["dob"] = get_real_confidence(dob_val, 85)
+    if parsed_dob:
+        extracted["dob"] = parsed_dob
+        extracted["confidence_scores"]["dob"] = get_real_confidence(parsed_dob, 88)
         for idx, l in enumerate(lines):
-            if dob_val in l:
+            if parsed_dob in l or (parsed_dob[:2] in l and parsed_dob[-4:] in l):
                 dob_line_idx = idx
                 break
 
-    # If there are multiple dates and doc is passport, subsequent dates are Issue / Expiry
-    if doc_type == "PASSPORT" and len(all_dates) >= 2:
-        extracted["expiry_date"] = all_dates[-1].group(0)
-        extracted["confidence_scores"]["expiry_date"] = get_real_confidence(all_dates[-1].group(0), 85)
+    if parsed_expiry and doc_type == "PASSPORT":
+        extracted["expiry_date"] = parsed_expiry
+        extracted["confidence_scores"]["expiry_date"] = get_real_confidence(parsed_expiry, 85)
 
     # --- 4. Extract Gender ---
-    if re.search(r'\bFEMALE\b|\bSEX\s*[:/]?\s*F\b|महिला', upper_combined):
+    if re.search(r'\bFEMALE\b|\bSEX\s*[:/]?\s*F\b|महिला|FEMALE/महिला|FEMALE\s*/\s*महिला|स्त्री', upper_combined):
         extracted["gender"] = "FEMALE"
         extracted["confidence_scores"]["gender"] = 92
-    elif re.search(r'\bMALE\b|\bSEX\s*[:/]?\s*M\b|पुरुष', upper_combined):
+    elif re.search(r'\bMALE\b|\bSEX\s*[:/]?\s*M\b|पुरुष|MALE/पुरुष|MALE\s*/\s*पुरुष', upper_combined):
         extracted["gender"] = "MALE"
         extracted["confidence_scores"]["gender"] = 92
-    elif re.search(r'\bTRANSGENDER\b', upper_combined):
+    elif re.search(r'\bTRANSGENDER\b|ट्रांसजेंडर', upper_combined):
         extracted["gender"] = "TRANSGENDER"
         extracted["confidence_scores"]["gender"] = 92
 
@@ -510,8 +687,9 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
         mrz_raw_lines = []
         for l in all_text_combined.split('\n'):
             l_strip = l.strip().replace(' ', '')
-            if (l_strip.startswith('P<') or l_strip.startswith('P<<') or (len(l_strip) >= 35 and '<' in l_strip)):
-                mrz_raw_lines.append(l_strip)
+            l_clean_chevrons = re.sub(r'[c«‹\(\[\{]', '<', l_strip)
+            if (l_clean_chevrons.startswith('P<') or l_clean_chevrons.startswith('P<<') or (len(l_clean_chevrons) >= 35 and '<' in l_clean_chevrons)):
+                mrz_raw_lines.append(l_clean_chevrons)
 
         if len(mrz_raw_lines) >= 2:
             extracted["mrz_lines"] = mrz_raw_lines[-2:]
@@ -527,8 +705,11 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
                 if mrz_res.get("given_names"):
                     extracted["given_names"] = mrz_res["given_names"]
                 if mrz_res.get("passport_number"):
-                    extracted["id_number"] = mrz_res["passport_number"]
-                    extracted["confidence_scores"]["id_number"] = 95
+                    # Validate and repair MRZ passport number if needed
+                    repaired_mrz_num = _repair_passport_ocr(mrz_res["passport_number"])
+                    if repaired_mrz_num:
+                        extracted["id_number"] = repaired_mrz_num
+                        extracted["confidence_scores"]["id_number"] = 95
                 if mrz_res.get("dob"):
                     extracted["dob"] = mrz_res["dob"]
                 if mrz_res.get("sex"):
@@ -560,7 +741,7 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
                 if cand and not _is_header_or_noise(cand):
                     extracted["place_of_issue"] = cand.upper()
 
-        if not extracted["name"]:
+        if not extracted["name"] or "<" in str(extracted.get("name", "")):
             parts = []
             if extracted["given_names"]:
                 parts.append(extracted["given_names"])
@@ -576,12 +757,13 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
 
     elif doc_type == "PAN":
         for i, line in enumerate(lines):
-            if "NAME" in line.upper() and i + 1 < len(lines):
+            upper_l = line.upper()
+            if "NAME" in upper_l and "FATHER" not in upper_l and i + 1 < len(lines):
                 pot = _clean_name_candidate(lines[i + 1])
                 if pot and len(pot) > 3 and not _is_header_or_noise(pot):
                     extracted["name"] = pot.upper()
                     extracted["confidence_scores"]["name"] = 88
-            if "FATHER" in line.upper() and i + 1 < len(lines):
+            if "FATHER" in upper_l and i + 1 < len(lines):
                 pot_f = _clean_name_candidate(lines[i + 1])
                 if pot_f and len(pot_f) > 3 and not _is_header_or_noise(pot_f):
                     extracted["father_name"] = pot_f.upper()

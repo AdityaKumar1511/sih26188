@@ -13,6 +13,7 @@ from ocr import perform_ocr, parse_document_fields, detect_and_decode_qr, cross_
 from forensics import compute_ela, compute_image_sharpness_and_lighting
 from db import cross_check_record
 from face_matcher import match_faces_1to1
+from cnn_model import predict_screening_image
 from blockchain_ledger import (
     anchor_verdict_to_blockchain,
     verify_blockchain_record,
@@ -245,6 +246,20 @@ async def extract_and_validate(
         f"OCR Engine: {engine_used.upper()}.",
         f"Document classified as: {doc_type}."
     ]
+
+    cnn_doc_result = await asyncio.to_thread(predict_screening_image, contents)
+    cnn_live_result = await asyncio.to_thread(predict_screening_image, live_bytes) if live_bytes is not None else None
+
+    if cnn_doc_result.get("is_safe") is False:
+        forensic_trace.append(f"CNN screening: Document classification={cnn_doc_result['predicted_label']} (confidence {cnn_doc_result['confidence']}).")
+    else:
+        forensic_trace.append(f"CNN screening: Document appears authentic (class={cnn_doc_result['predicted_label']}, confidence {cnn_doc_result['confidence']}).")
+
+    if cnn_live_result is not None:
+        if cnn_live_result.get("is_safe") is False:
+            forensic_trace.append(f"CNN screening: Live face classification={cnn_live_result['predicted_label']} (confidence {cnn_live_result['confidence']}).")
+        else:
+            forensic_trace.append(f"CNN screening: Live face appears genuine (class={cnn_live_result['predicted_label']}, confidence {cnn_live_result['confidence']}).")
 
     # 4. Algorithmic Checksum Validation
     checksum_passed = False
@@ -530,19 +545,40 @@ async def extract_and_validate(
             score=biometric_verification_obj.match_score
         ))
 
+    cnn_score = cnn_doc_result.get("confidence", 0.0) * 100
+    if cnn_live_result is not None:
+        cnn_score = max(cnn_score, cnn_live_result.get("confidence", 0.0) * 100)
+
+    validation_checks.append(ValidationCheckItem(
+        id="c8_cnn",
+        name="CNN Document & Face Screening",
+        category="AI",
+        status="pass" if cnn_doc_result.get("is_safe") and (cnn_live_result is None or cnn_live_result.get("is_safe")) else "fail",
+        details=(
+            f"Document: {cnn_doc_result['predicted_label']} ({cnn_doc_result['confidence']:.2f}) | "
+            f"Live face: {cnn_live_result['predicted_label']} ({cnn_live_result['confidence']:.2f})"
+            if cnn_live_result is not None else
+            f"Document: {cnn_doc_result['predicted_label']} ({cnn_doc_result['confidence']:.2f})"
+        ),
+        score=int(cnn_score)
+    ))
+
     # Weighted composite Authenticity Score (0-100)
     if biometric_verification_obj is not None:
         # With Biometric: OCR 10%, Checksum 20%, QR 10%, ELA 15%, Sharpness 5%, Registry 15%, Biometrics 25%
-        weights = [0.10, 0.20, 0.10, 0.15, 0.05, 0.15, 0.25]
-        scores = [avg_ocr_conf, chk_score, qr_score, ela_score, sharp_score, db_score, biometric_score]
+        weights = [0.10, 0.20, 0.10, 0.15, 0.05, 0.15, 0.20, 0.05]
+        scores = [avg_ocr_conf, chk_score, qr_score, ela_score, sharp_score, db_score, biometric_score, int(cnn_score)]
     else:
-        weights = [0.15, 0.25, 0.15, 0.15, 0.10, 0.20]
-        scores = [avg_ocr_conf, chk_score, qr_score, ela_score, sharp_score, db_score]
+        weights = [0.15, 0.25, 0.15, 0.15, 0.10, 0.15, 0.05]
+        scores = [avg_ocr_conf, chk_score, qr_score, ela_score, sharp_score, db_score, int(cnn_score)]
 
     authenticity_score = int(sum(w * s for w, s in zip(weights, scores)))
 
     # Verdict Logic
-    if (not checksum_passed and id_number) or qr_verify.get("qr_status") == "TAMPERED":
+    if cnn_doc_result.get("is_safe") is False or (cnn_live_result is not None and cnn_live_result.get("is_safe") is False):
+        verdict = "TAMPERED"
+        authenticity_score = min(authenticity_score, 35)
+    elif (not checksum_passed and id_number) or qr_verify.get("qr_status") == "TAMPERED":
         verdict = "TAMPERED"
         authenticity_score = min(authenticity_score, 35)
     elif db_result["status"] == "REVOKED" or ela_res.get("is_tampered_by_ela"):

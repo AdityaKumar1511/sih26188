@@ -354,7 +354,8 @@ function getApiBaseUrl(): string {
 
 async function analyzeDocumentWithBiometrics(
   docFileInput: File | SamplePreset,
-  liveFaceInput: File | null
+  liveFaceInput: File | null,
+  signal?: AbortSignal
 ): Promise<ScreeningResult> {
   // If user selected one of the instant demo presets
   if (typeof docFileInput === 'object' && 'mockResult' in docFileInput) {
@@ -375,6 +376,7 @@ async function analyzeDocumentWithBiometrics(
     const response = await fetch(`${baseUrl}/extract-and-validate`, {
       method: 'POST',
       body: formData,
+      signal,
     });
 
     if (!response.ok) {
@@ -829,25 +831,23 @@ export default function DocumentScreeningApp() {
     }
 
     setAppState('processing');
-    setProcessingProgress(10);
+    setProcessingProgress(12);
     setCurrentStepIndex(0);
     setOfficerDecision(null);
 
-    const interval = setInterval(() => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+    const progressInterval = setInterval(() => {
       setProcessingProgress((prev) => {
-        if (prev >= 92) {
-          clearInterval(interval);
-          return 92;
-        }
-        const next = prev + Math.floor(Math.random() * 16) + 8;
-        return next > 92 ? 92 : next;
+        if (prev >= 88) return 88;
+        return prev + 8;
       });
     }, 350);
 
     const stepInterval = setInterval(() => {
       setCurrentStepIndex((prev) => {
         if (prev < processingSteps.length - 1) return prev + 1;
-        clearInterval(stepInterval);
         return prev;
       });
     }, 450);
@@ -856,15 +856,17 @@ export default function DocumentScreeningApp() {
       const input = selectedPreset || selectedFile!;
       const result = await analyzeDocumentWithBiometrics(
         input,
-        appMode === 'standard' ? null : currentLiveFace
+        appMode === 'standard' ? null : currentLiveFace,
+        controller.signal
       );
 
       if (appMode === 'standard' && result.biometricResult) {
         result.biometricResult = undefined;
       }
 
-      clearInterval(interval);
+      clearInterval(progressInterval);
       clearInterval(stepInterval);
+      clearTimeout(timeoutId);
       setProcessingProgress(100);
 
       setTimeout(() => {
@@ -875,11 +877,16 @@ export default function DocumentScreeningApp() {
           setActiveTab('biometrics');
         }
         setAppState('results');
-      }, 400);
+      }, 300);
     } catch (err: any) {
-      clearInterval(interval);
+      clearInterval(progressInterval);
       clearInterval(stepInterval);
-      alert(`Error analyzing document: ${err.message || 'Server connection failed'}`);
+      clearTimeout(timeoutId);
+      if (err?.name === 'AbortError') {
+        alert('Screening timed out. The backend is taking too long or is not reachable on localhost:8000.');
+      } else {
+        alert(`Error analyzing document: ${err.message || 'Server connection failed'}`);
+      }
       setAppState('upload');
     }
   };

@@ -1,0 +1,17 @@
+{
+  "classes": [
+    "authentic_document",
+    "tampered_document",
+    "live_face",
+    "spoof_face"
+  ],
+  "input_shape": [
+    64,
+    64,
+    3
+  ],
+  "num_classes": 4,
+  "epochs": 6,
+  "dataset_dir": "C:\\Users\\Yuvraj Atri\\Documents\\SIHORIGINAL EDIT\\sih26188\\backend\\datasets\\face_document_screening",
+  "model_path": "C:\\Users\\Yuvraj Atri\\Documents\\SIHORIGINAL EDIT\\sih26188\\backend\\models\\face_document_cnn.pth"
+}

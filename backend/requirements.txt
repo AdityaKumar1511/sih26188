@@ -9,3 +9,6 @@ numpy>=1.26.4
 supabase>=2.3.4
 python-dotenv>=1.0.1
 reportlab>=4.1.0
+torch>=2.3.0
+torchvision>=0.18.0
+pytest>=8.0.0
