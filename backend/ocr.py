@@ -36,6 +36,7 @@ try:
         "/usr/local/bin/tesseract",
         "/opt/homebrew/bin/tesseract",
     ]
+    _found_tess = False
     for _t_cmd in _tesseract_candidates:
         if _t_cmd and os.path.exists(_t_cmd):
             pytesseract.tesseract_cmd = _t_cmd
@@ -47,7 +48,10 @@ try:
             if os.path.exists(_tessdata_path) and "TESSDATA_PREFIX" not in os.environ:
                 os.environ["TESSDATA_PREFIX"] = _tessdata_path
             logger.info(f"Tesseract OCR configured at: {_t_cmd}")
+            _found_tess = True
             break
+    if not _found_tess and not shutil.which("tesseract"):
+        pytesseract = None
 except ImportError:
     pytesseract = None
 
