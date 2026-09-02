@@ -540,15 +540,21 @@ def _parse_dob(all_text: str) -> Tuple[Optional[str], Optional[str]]:
     dob_val = None
     expiry_val = None
 
-    # Standard numeric date: DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
-    d_regex = r'\b(0[1-9]|[12][0-9]|3[01])[\/\-\.](0[1-9]|1[012])[\/\-\.](19\d\d|20\d\d)\b'
+    # Standard numeric date: DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY (allows optional spaces around separators)
+    d_regex = r'\b(0?[1-9]|[12][0-9]|3[01])\s*[\/\-\.]\s*(0?[1-9]|1[012])\s*[\/\-\.]\s*(19\d\d|20\d\d)\b'
     matches = list(re.finditer(d_regex, all_text))
     if matches:
         first_m = matches[0]
-        dob_val = f"{first_m.group(1)}/{first_m.group(2)}/{first_m.group(3)}"
+        d_str = first_m.group(1).zfill(2)
+        m_str = first_m.group(2).zfill(2)
+        y_str = first_m.group(3)
+        dob_val = f"{d_str}/{m_str}/{y_str}"
         if len(matches) >= 2:
             sec_m = matches[-1]
-            expiry_val = f"{sec_m.group(1)}/{sec_m.group(2)}/{sec_m.group(3)}"
+            d_sec = sec_m.group(1).zfill(2)
+            m_sec = sec_m.group(2).zfill(2)
+            y_sec = sec_m.group(3)
+            expiry_val = f"{d_sec}/{m_sec}/{y_sec}"
 
     # Textual month format: 14 Aug 1988 or 14-Aug-1988 or 14 August 1988
     if not dob_val:
