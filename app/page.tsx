@@ -848,7 +848,7 @@ export default function DocumentScreeningApp() {
     setOfficerDecision(null);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
 
     const progressInterval = setInterval(() => {
       setProcessingProgress((prev) => {
@@ -894,8 +894,9 @@ export default function DocumentScreeningApp() {
       clearInterval(progressInterval);
       clearInterval(stepInterval);
       clearTimeout(timeoutId);
-      if (err?.name === 'AbortError') {
-        alert('Screening timed out. The backend is taking too long or is not reachable on localhost:8000.');
+      const isAbort = err?.name === 'AbortError' || err?.message?.toLowerCase()?.includes('abort');
+      if (isAbort) {
+        alert('Screening timed out. The cloud backend (Render) is waking up from idle sleep or local backend is unreachable. Please retry in a few seconds!');
       } else {
         alert(`Error analyzing document: ${err.message || 'Server connection failed'}`);
       }
