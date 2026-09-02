@@ -274,6 +274,10 @@ _NOISE_KEYWORDS = frozenset([
     "DEPARTMENT", "BHARAT", "SARKAR", "VID", "VALID", "DOWNLOAD",
     "GENERATED", "LETTER", "DATE", "HELP", "WWW", "HTTP", "COM",
     "MALE", "FEMALE", "DOB", "YEAR", "BIRTH", "SIGNATURE", "HOLDER",
+    "FATHER", "FATHER'S", "HUSBAND", "HUSBAND'S", "MOTHER", "GUARDIAN",
+    "CARE", "S/O", "D/O", "W/O", "C/O", "SO", "DO", "WO", "CO",
+    "POST", "DISTRICT", "STATE", "PIN", "PINCODE", "PO", "VILLAGE",
+    "ROAD", "STREET", "FLAT", "HOUSE", "BUILDING", "NAGAR", "COLONY",
     # Passport Specific Terms
     "PASSPORT", "REPUBLIC", "NATIONALITY", "INDIAN", "HYDERABAD",
     "SURNAME", "GIVEN", "NAME", "NAMES", "SEX", "CODE", "TYPE",
