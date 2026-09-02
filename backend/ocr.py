@@ -275,7 +275,8 @@ _NOISE_STEMS = (
     "CITIZEN", "VERIF", "AUTHENTIC", "QR", "XML", "OFFLINE", "SCAN", "TOLL",
     "FREE", "1947", "SAMPLE", "SPECIMEN", "WATERMARK", "STOCK", "SHUTTER",
     "GETTY", "ALAMY", "DEPOSIT", "DREAMS", "ILLUSTRAT", "VECTOR", "OVERLAY",
-    "CANVAS", "SCREENING", "FATHER", "HUSBAND", "MOTHER", "GUARDIAN", "CARE"
+    "CANVAS", "SCREENING", "FATHER", "HUSBAND", "MOTHER", "GUARDIAN", "CARE",
+    "SETT", "RESET", "PRESET", "ISSUED", "ENROLMENT", "ENROLLMENT"
 )
 
 _NOISE_KEYWORDS = frozenset([
@@ -350,17 +351,53 @@ def _clean_name_candidate(text: str) -> str:
     return " ".join(filtered).strip(" .-_:,;/\\'\"")
 
 
+def _is_garbage_or_ocr_artifact(word: str) -> bool:
+    """Detects OCR noise tokens and garbled Devanagari-in-English transliteration artifacts."""
+    w = word.strip().upper()
+    if len(w) <= 2 and w not in {"DR", "MR", "MS", "MD", "OM", "KM", "SMT", "SH", "KU"}:
+        return True
+    # Repeating 3+ identical characters (e.g. eee, aaa, ooo)
+    if re.search(r'([A-Z])\1\1', w):
+        return True
+    # 3+ consecutive vowels or 4+ consecutive consonants (e.g. Foeeye, Muvajau)
+    if re.search(r'[AEIOU]{3,}', w) or re.search(r'[^AEIOUY]{4,}', w):
+        return True
+    # Extremely abnormal vowel ratio
+    vowels = sum(1 for ch in w if ch in "AEIOUY")
+    ratio = vowels / len(w)
+    if ratio < 0.15 or ratio > 0.75:
+        return True
+    return False
+
+
 def _score_name_candidate(name: str) -> int:
     """Scores candidate name plausibility."""
     if not name or len(name) < 3 or _is_header_or_noise(name):
         return 0
     words = name.split()
+    if not words or len(words) > 5:
+        return 0
+
+    # If any word in candidate is garbage artifact, reject candidate completely
+    for w in words:
+        if _is_garbage_or_ocr_artifact(w):
+            return 0
+
+    # At least one word in a real name must have >= 4 characters
+    if not any(len(w) >= 4 for w in words):
+        return 0
+
     score = 0
-    if 2 <= len(words) <= 4:
-        score += 40
+    if len(words) == 2:
+        score += 80  # Standard Firstname Lastname (e.g. Yuvraj Atri)
+    elif len(words) == 3:
+        score += 70  # Firstname Middlename Lastname
     elif len(words) == 1 and len(name) >= 4:
-        score += 15
-    avg_len = sum(len(w) for w in words) / len(words) if words else 0
+        score += 20
+    else:
+        score += 10
+
+    avg_len = sum(len(w) for w in words) / len(words)
     if avg_len >= 3.5:
         score += 25
     if not any(ch.isdigit() for ch in name):
