@@ -899,75 +899,67 @@ export default function DocumentScreeningApp() {
   };
 
   return (
-    <div className="min-h-screen bg-dark-950 text-neutral-100 flex flex-col font-sans selection:bg-orange-600 selection:text-white">
+    <div className="min-h-screen relative z-10 text-neutral-100 flex flex-col font-sans selection:bg-orange-600 selection:text-white">
       {/* Hidden canvas for snapshot capture */}
       <canvas ref={canvasRef} className="hidden" />
 
       {/* ==================================================================== */}
-      {/* TOP HEADER / BAR                                                     */}
+      {/* NAVBAR (brand wordmark + system status + mode toggle)                */}
       {/* ==================================================================== */}
-      <header className="border-b border-dark-700 bg-dark-900 sticky top-0 z-50">
+      <header className="border-b border-dark-700/60 bg-dark-900/90 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           
-          {/* Left Brand */}
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-orange-600 flex items-center justify-center text-white font-bold text-base shadow-sm">
-              <Building2 className="w-5 h-5" />
+          {/* Left: Sentinel Wordmark */}
+          <div className="flex items-center gap-3 cursor-default">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500 to-orange-700 flex items-center justify-center text-white shadow-lg shadow-orange-600/25">
+              <Scan className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-orange-400 bg-dark-850 px-2 py-0.5 rounded border border-orange-900/60">
-                  Ministry of Home Affairs
+                <h1 className="text-xl font-display font-bold text-white tracking-[0.06em] uppercase leading-none">
+                  Sentinel
+                </h1>
+                <span className="text-[10px] font-hud text-orange-400/90 bg-orange-950/60 border border-orange-900/60 px-1.5 py-0.5 rounded">
+                  PS26188
                 </span>
-                <span className="text-xs text-neutral-400 font-mono">PS26188</span>
               </div>
-              <h1 className="text-sm sm:text-base font-bold text-white tracking-tight">
-                AI Fake Identity & Document Screening System
-              </h1>
+              <p className="text-[11px] font-hud text-neutral-400 tracking-normal mt-0.5">
+                AI Document & Identity Screening
+              </p>
             </div>
           </div>
 
-          {/* Mode Switcher */}
-          <div className="flex items-center gap-2 bg-black p-1 rounded-lg border border-dark-700">
-            <button
-              onClick={() => {
-                if (isCameraActive) stopCamera();
-                setAppMode('egate_kiosk');
-              }}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                appMode === 'egate_kiosk'
-                  ? 'bg-orange-600 text-white shadow'
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              <Camera className="w-3.5 h-3.5" />
-              <span>E-Gate Biometric Kiosk</span>
-            </button>
-            <button
-              onClick={() => {
-                if (isCameraActive) stopCamera();
-                setAppMode('standard');
-              }}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                appMode === 'standard'
-                  ? 'bg-orange-600 text-white shadow'
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Document Only</span>
-            </button>
-          </div>
-
-          {/* Right Status */}
-          <div className="hidden md:flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-dark-850 border border-dark-700 text-xs font-mono text-neutral-300">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>BIOMETRIC CORE: ONLINE</span>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-dark-850 border border-dark-700 text-xs font-mono text-orange-400">
-              <Cpu className="w-3.5 h-3.5" />
-              <span>v4.3-SFace</span>
+          {/* Right Controls: Mode Toggle */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 bg-dark-950 p-1 rounded-lg border border-dark-700/60">
+              <button
+                onClick={() => {
+                  if (isCameraActive) stopCamera();
+                  setAppMode('egate_kiosk');
+                }}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${
+                  appMode === 'egate_kiosk'
+                    ? 'bg-orange-600 text-white shadow-sm shadow-orange-600/30'
+                    : 'text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>E-Gate Kiosk</span>
+              </button>
+              <button
+                onClick={() => {
+                  if (isCameraActive) stopCamera();
+                  setAppMode('standard');
+                }}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${
+                  appMode === 'standard'
+                    ? 'bg-orange-600 text-white shadow-sm shadow-orange-600/30'
+                    : 'text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Document Only</span>
+              </button>
             </div>
           </div>
 
@@ -983,22 +975,14 @@ export default function DocumentScreeningApp() {
         {appState === 'upload' && (
           <div className="space-y-6 my-auto py-2">
             
-            {/* Heading */}
-            <div className="text-center max-w-3xl mx-auto space-y-1.5">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-950/60 border border-orange-800/80 text-orange-400 text-xs font-mono mb-1">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>
-                  {appMode === 'egate_kiosk'
-                    ? '1:1 Live Facial Verification & Anti-Spoofing Enabled'
-                    : 'Document Only Forensic Screening Mode'}
-                </span>
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+            {/* Heading without upper badge */}
+            <div className="text-center max-w-3xl mx-auto space-y-2">
+              <h2 className="reveal-wipe reveal-wipe-delay-1 text-2xl sm:text-4xl font-display font-bold text-white tracking-tight">
                 {appMode === 'egate_kiosk'
                   ? 'Border Checkpoint & Document Screening Terminal'
                   : 'Identity Document Analysis & Forensic Screening'}
               </h2>
-              <p className="text-neutral-400 text-xs sm:text-sm">
+              <p className="reveal-wipe reveal-wipe-delay-2 text-neutral-400 text-xs sm:text-sm max-w-2xl mx-auto leading-relaxed">
                 {appMode === 'egate_kiosk'
                   ? 'Scan passenger identity credentials and verify live webcam biometric facial match in real time.'
                   : 'Scan and analyze ID credentials (Aadhaar, PAN, Passport) for tampering, OCR extraction, ELA splicing, and checksum verification.'}
@@ -1013,15 +997,15 @@ export default function DocumentScreeningApp() {
             }>
               
               {/* Box 1: Document Upload */}
-              <div className="matte-card p-5 border border-dark-700 flex flex-col justify-between space-y-4 bg-dark-850">
+              <div className="matte-card matte-card-hover p-5 border border-dark-700 flex flex-col justify-between space-y-4 bg-dark-850">
                 <div className="flex items-center justify-between border-b border-dark-700 pb-3">
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-orange-500" />
-                    <span className="text-xs font-bold text-white uppercase tracking-wider">
+                    <span className="text-xs font-bold text-white uppercase tracking-wider font-display">
                       {appMode === 'egate_kiosk' ? 'Step 1: ID Document Scan' : 'ID Document Scan'}
                     </span>
                   </div>
-                  <span className="text-[11px] font-mono text-neutral-400">Aadhaar / PAN / Passport</span>
+                  <span className="text-[11px] font-hud text-neutral-400">Aadhaar / PAN / Passport</span>
                 </div>
 
                 <div
@@ -1051,21 +1035,21 @@ export default function DocumentScreeningApp() {
 
                   {!imagePreviewUrl ? (
                     <div className="space-y-3">
-                      <div className="w-12 h-12 rounded-xl bg-dark-800 border border-dark-700 flex items-center justify-center mx-auto text-orange-500">
+                      <div className="w-12 h-12 rounded-xl bg-dark-800 border border-dark-700 flex items-center justify-center mx-auto text-orange-500 shadow-md">
                         <UploadCloud className="w-6 h-6" />
                       </div>
                       <div>
                         <p className="text-xs font-semibold text-white">
                           Drop ID Card Scan Here or Browse
                         </p>
-                        <p className="text-[11px] text-neutral-500 mt-0.5 font-mono">
+                        <p className="text-[11px] text-neutral-500 mt-0.5 font-hud">
                           JPG, PNG up to 15MB
                         </p>
                       </div>
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                        className="px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-neutral-200 text-xs font-semibold border border-dark-700 transition"
+                        className="btn-interactive px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-neutral-200 text-xs font-semibold border border-dark-700 transition"
                       >
                         Select Document
                       </button>
@@ -1076,13 +1060,13 @@ export default function DocumentScreeningApp() {
                       <img
                         src={imagePreviewUrl}
                         alt="Document Preview"
-                        className="max-h-44 object-contain rounded border border-dark-700"
+                        className="max-h-44 object-contain rounded border border-dark-700 shadow-lg"
                       />
-                      <div className="absolute bottom-2 left-2 right-2 bg-dark-900/90 backdrop-blur px-2.5 py-1 rounded text-[11px] font-mono text-neutral-300 border border-dark-700 flex items-center justify-between">
+                      <div className="absolute bottom-2 left-2 right-2 bg-dark-900/90 backdrop-blur px-2.5 py-1 rounded text-[11px] font-hud text-neutral-300 border border-dark-700 flex items-center justify-between">
                         <span className="truncate">{selectedFile ? selectedFile.name : selectedPreset?.name}</span>
                         <button
                           onClick={(e) => { e.stopPropagation(); setImagePreviewUrl(null); setSelectedFile(null); setSelectedPreset(null); }}
-                          className="text-red-400 hover:text-red-300 ml-2 font-bold"
+                          className="text-red-400 hover:text-red-300 ml-2 font-bold cursor-pointer"
                         >
                           ✕
                         </button>
@@ -1094,15 +1078,15 @@ export default function DocumentScreeningApp() {
 
               {/* Box 2: Live Webcam / Passenger Snapshot (Only in E-Gate Kiosk mode) */}
               {appMode === 'egate_kiosk' && (
-              <div className="matte-card p-5 border border-dark-700 flex flex-col justify-between space-y-4 bg-dark-850">
+              <div className="matte-card matte-card-hover p-5 border border-dark-700 flex flex-col justify-between space-y-4 bg-dark-850">
                 <div className="flex items-center justify-between border-b border-dark-700 pb-3">
                   <div className="flex items-center gap-2">
                     <Camera className="w-4 h-4 text-orange-500" />
-                    <span className="text-xs font-bold text-white uppercase tracking-wider">
+                    <span className="text-xs font-bold text-white uppercase tracking-wider font-display">
                       Step 2: Live Passenger Face
                     </span>
                   </div>
-                  <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1">
+                  <span className="text-[11px] font-hud text-emerald-400 flex items-center gap-1">
                     <Radio className="w-3 h-3 animate-pulse" /> Live HUD
                   </span>
                 </div>
@@ -1122,7 +1106,7 @@ export default function DocumentScreeningApp() {
                       {/* Face Oval Reticle Overlay */}
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="w-28 h-36 border-2 border-dashed border-orange-500/80 rounded-full animate-pulse flex items-center justify-center">
-                          <span className="text-[10px] text-orange-400 font-mono bg-black/60 px-1.5 py-0.5 rounded">
+                          <span className="text-[10px] text-orange-400 font-hud bg-black/60 px-1.5 py-0.5 rounded">
                             Align Face
                           </span>
                         </div>
@@ -1131,7 +1115,7 @@ export default function DocumentScreeningApp() {
                       {/* Countdown Overlay */}
                       {countdown !== null && (
                         <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-                          <span className="text-5xl font-extrabold text-orange-500 font-mono animate-ping">
+                          <span className="text-5xl font-extrabold text-orange-500 font-hud animate-ping">
                             {countdown}
                           </span>
                         </div>
@@ -1142,7 +1126,7 @@ export default function DocumentScreeningApp() {
                         <button
                           type="button"
                           onClick={captureSnapshot}
-                          className="px-4 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-bold shadow-lg transition flex items-center gap-1.5"
+                          className="btn-interactive px-4 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-bold shadow-lg transition flex items-center gap-1.5 cursor-pointer"
                         >
                           <Camera className="w-3.5 h-3.5" />
                           <span>Snap Now</span>
@@ -1150,14 +1134,14 @@ export default function DocumentScreeningApp() {
                         <button
                           type="button"
                           onClick={triggerAutoCapture}
-                          className="px-3 py-1.5 bg-dark-800 hover:bg-dark-700 text-neutral-200 border border-dark-700 rounded-lg text-xs font-mono transition"
+                          className="btn-interactive px-3 py-1.5 bg-dark-800 hover:bg-dark-700 text-neutral-200 border border-dark-700 rounded-lg text-xs font-hud transition cursor-pointer"
                         >
                           ⏱ 3s Timer
                         </button>
                         <button
                           type="button"
                           onClick={stopCamera}
-                          className="px-2.5 py-1.5 bg-red-950 text-red-400 border border-red-900 rounded-lg text-xs transition"
+                          className="btn-interactive px-2.5 py-1.5 bg-red-950 text-red-400 border border-red-900 rounded-lg text-xs transition cursor-pointer"
                         >
                           <CameraOff className="w-3.5 h-3.5" />
                         </button>
@@ -1172,20 +1156,20 @@ export default function DocumentScreeningApp() {
                       <img
                         src={liveFacePreviewUrl}
                         alt="Live Passenger"
-                        className="max-h-44 object-contain rounded border border-dark-700"
+                        className="max-h-44 object-contain rounded border border-dark-700 shadow-lg"
                       />
-                      <div className="absolute bottom-2 left-2 right-2 bg-dark-900/90 backdrop-blur px-2.5 py-1 rounded text-[11px] font-mono text-neutral-300 border border-dark-700 flex items-center justify-between">
+                      <div className="absolute bottom-2 left-2 right-2 bg-dark-900/90 backdrop-blur px-2.5 py-1 rounded text-[11px] font-hud text-neutral-300 border border-dark-700 flex items-center justify-between">
                         <span className="truncate">Passenger Snapshot Ready</span>
                         <div className="flex items-center gap-2">
                           <button
                             onClick={startCamera}
-                            className="text-orange-400 hover:text-orange-300 text-[11px] font-bold"
+                            className="text-orange-400 hover:text-orange-300 text-[11px] font-bold cursor-pointer"
                           >
                             Retake
                           </button>
                           <button
                             onClick={() => { setLiveFacePreviewUrl(null); setLiveFaceFile(null); }}
-                            className="text-red-400 hover:text-red-300 font-bold"
+                            className="text-red-400 hover:text-red-300 font-bold cursor-pointer"
                           >
                             ✕
                           </button>
@@ -1197,14 +1181,14 @@ export default function DocumentScreeningApp() {
                   {/* Idle Camera State */}
                   {!isCameraActive && !liveFacePreviewUrl && (
                     <div className="space-y-3 p-4 text-center">
-                      <div className="w-12 h-12 rounded-xl bg-dark-800 border border-dark-700 flex items-center justify-center mx-auto text-orange-500">
+                      <div className="w-12 h-12 rounded-xl bg-dark-800 border border-dark-700 flex items-center justify-center mx-auto text-orange-500 shadow-md">
                         <Camera className="w-6 h-6" />
                       </div>
                       <div>
                         <p className="text-xs font-semibold text-white">
                           Capture Passenger Live via Webcam
                         </p>
-                        <p className="text-[11px] text-neutral-500 mt-0.5 font-mono">
+                        <p className="text-[11px] text-neutral-500 mt-0.5 font-hud">
                           Live E-Gate camera or portrait file upload
                         </p>
                       </div>
@@ -1212,7 +1196,7 @@ export default function DocumentScreeningApp() {
                         <button
                           type="button"
                           onClick={startCamera}
-                          className="px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs shadow transition flex items-center gap-1.5"
+                          className="btn-interactive px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs shadow transition flex items-center gap-1.5 cursor-pointer"
                         >
                           <Camera className="w-3.5 h-3.5" />
                           <span>Open Webcam</span>
@@ -1220,7 +1204,7 @@ export default function DocumentScreeningApp() {
                         <button
                           type="button"
                           onClick={() => liveFaceInputRef.current?.click()}
-                          className="px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-neutral-200 text-xs font-semibold border border-dark-700 transition"
+                          className="btn-interactive px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 text-neutral-200 text-xs font-semibold border border-dark-700 transition cursor-pointer"
                         >
                           Upload Photo
                         </button>
@@ -1235,7 +1219,7 @@ export default function DocumentScreeningApp() {
                       />
 
                       {cameraError && (
-                        <p className="text-[11px] text-amber-400 font-mono mt-1">
+                        <p className="text-[11px] text-amber-400 font-hud mt-1">
                           ⚠ {cameraError}
                         </p>
                       )}
@@ -1254,7 +1238,7 @@ export default function DocumentScreeningApp() {
                 <button
                   type="button"
                   onClick={handleStartScreening}
-                  className="w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-sm shadow-lg transition flex items-center justify-center gap-2"
+                  className="btn-interactive w-full py-3.5 rounded-xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white font-display font-bold text-sm shadow-xl shadow-orange-600/25 transition flex items-center justify-center gap-2 cursor-pointer border border-orange-400/30"
                 >
                   <Scan className="w-4 h-4" />
                   <span>Execute Full Forensic & Biometric Screening</span>
@@ -1264,7 +1248,7 @@ export default function DocumentScreeningApp() {
 
             {/* Instant Demo Presets (With Pre-Configured Biometric Pairs) */}
             <div className="max-w-4xl mx-auto pt-2">
-              <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2 text-center">
+              <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2 text-center font-hud">
                 Or choose an instant border screening test case:
               </div>
 
@@ -1275,34 +1259,34 @@ export default function DocumentScreeningApp() {
                     <div
                       key={preset.id}
                       onClick={() => handlePresetSelect(preset)}
-                      className={`matte-card p-3.5 transition cursor-pointer text-left flex flex-col justify-between ${
+                      className={`matte-card matte-card-hover hover-glow p-3.5 transition cursor-pointer text-left flex flex-col justify-between ${
                         isSelected
-                          ? 'border-orange-500 bg-dark-800 ring-1 ring-orange-500'
+                          ? 'border-orange-500 bg-dark-800 ring-1 ring-orange-500 shadow-md shadow-orange-600/10'
                           : 'hover:border-dark-600 bg-dark-850'
                       }`}
                     >
                       <div>
                         <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <span className="text-xs font-bold text-white truncate">
+                          <span className="text-xs font-bold text-white truncate font-display">
                             {preset.docType}
                           </span>
                           <span
-                            className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded ${
+                            className={`text-[10px] font-bold font-hud px-2 py-0.5 rounded border ${
                               preset.badgeStyle === 'success'
-                                ? 'bg-emerald-950 text-emerald-400 border-emerald-900'
-                                : 'bg-red-950 text-red-400 border-red-900'
+                                ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800/80'
+                                : 'bg-red-950/80 text-red-400 border-red-800/80'
                             }`}
                           >
                             {preset.badgeText}
                           </span>
                         </div>
-                        <p className="text-[11px] text-neutral-400 line-clamp-2 mb-2">
+                        <p className="text-[11px] text-neutral-400 line-clamp-2 mb-2 leading-relaxed">
                           {preset.description}
                         </p>
                       </div>
 
                       <div className="pt-2 border-t border-dark-700 flex items-center justify-between text-xs text-orange-500 font-medium">
-                        <span>Load Test Pair</span>
+                        <span className="font-hud text-[11px]">Load Test Pair</span>
                         <ChevronRight className="w-3.5 h-3.5" />
                       </div>
                     </div>
@@ -2123,17 +2107,6 @@ export default function DocumentScreeningApp() {
         </div>
       )}
 
-      {/* FOOTER */}
-      <footer className="border-t border-dark-700 bg-dark-900 text-xs text-neutral-400 py-3">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div>
-            <span>Ministry of Home Affairs (MHA) • Smart India Hackathon PS26188</span>
-          </div>
-          <div className="font-mono text-[11px] text-orange-400">
-            Automated Border E-Gate Terminal v4.3
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

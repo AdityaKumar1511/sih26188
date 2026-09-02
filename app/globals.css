@@ -5,31 +5,247 @@
 :root {
   --bg-dark: #050505;
   --surface-card: #121212;
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 }
 
 body {
   background-color: #050505;
   color: #f5f5f5;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-body);
   overflow-x: hidden;
+  position: relative;
 }
 
-/* Matte Black & Orange card container */
+/* Hide default cursor on desktop pointer devices */
+@media (pointer: fine) {
+  html, body, *, *::before, *::after, button, a, input, select, textarea {
+    cursor: none !important;
+  }
+}
+
+/* Film grain / noise texture overlay — kills the flat generic dark theme look */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* Subtle, soft-blurred cyber grid structure */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 60px 60px;
+  filter: blur(1.5px);
+  mask-image: radial-gradient(ellipse 85% 75% at 50% 35%, black 25%, transparent 85%);
+  -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 35%, black 25%, transparent 85%);
+  opacity: 0.8;
+}
+
+/* ============================================================================
+   TYPOGRAPHY — Display vs Body vs Mono
+   ============================================================================ */
+
+/* Display headings — tight, bold, commanding */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.025em;
+}
+
+/* HUD / data elements — monospace technical */
+.font-hud {
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================================
+   LAYERED DEPTH CARDS — gradient border + inset shadow
+   ============================================================================ */
+
 .matte-card {
-  background-color: #121212;
-  border: 1px solid #262626;
+  background:
+    linear-gradient(#121212, #121212) padding-box,
+    linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 50%, transparent 100%) border-box;
+  border: 1px solid transparent;
   border-radius: 0.75rem;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255,255,255,0.04),
+    inset 0 0 20px 0 rgba(0,0,0,0.25),
+    0 1px 3px 0 rgba(0,0,0,0.4);
 }
 
 .matte-card-hover {
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 .matte-card-hover:hover {
-  border-color: #f97316;
-  background-color: #171717;
+  background:
+    linear-gradient(#171717, #141414) padding-box,
+    linear-gradient(180deg, rgba(249,115,22,0.35) 0%, rgba(249,115,22,0.08) 50%, transparent 100%) border-box;
+  border: 1px solid transparent;
+  box-shadow:
+    inset 0 1px 0 0 rgba(249,115,22,0.1),
+    inset 0 0 20px 0 rgba(0,0,0,0.2),
+    0 0 20px 0 rgba(249,115,22,0.06),
+    0 2px 8px 0 rgba(0,0,0,0.5);
 }
 
-/* Custom scrollbar */
+/* ============================================================================
+   MOTION — Scanline, Reveal, Pulse Animations
+   ============================================================================ */
+
+/* Horizontal scanline laser sweep — loops across a card/zone */
+@keyframes scanline-sweep {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateY(800%); opacity: 0; }
+}
+
+.scan-zone {
+  position: relative;
+  overflow: hidden;
+}
+
+.scan-zone::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  top: 0;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(249, 115, 22, 0.15) 15%,
+    rgba(249, 115, 22, 0.6) 50%,
+    rgba(249, 115, 22, 0.15) 85%,
+    transparent 100%
+  );
+  box-shadow: 0 0 12px 2px rgba(249, 115, 22, 0.15);
+  animation: scanline-sweep 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.scan-zone:hover::after {
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(249, 115, 22, 0.25) 15%,
+    rgba(249, 115, 22, 0.9) 50%,
+    rgba(249, 115, 22, 0.25) 85%,
+    transparent 100%
+  );
+  box-shadow: 0 0 20px 4px rgba(249, 115, 22, 0.25);
+}
+
+/* Status pill scanning line — sweeps across like a live indicator */
+@keyframes pill-scan {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+.status-pill {
+  position: relative;
+  overflow: hidden;
+}
+
+.status-pill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(74, 222, 128, 0.12),
+    transparent
+  );
+  animation: pill-scan 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Clip-path mask-wipe text reveal — staggered entrance */
+@keyframes wipe-reveal {
+  0%   { clip-path: inset(0 100% 0 0); opacity: 0; }
+  30%  { opacity: 1; }
+  100% { clip-path: inset(0 0% 0 0); opacity: 1; }
+}
+
+.reveal-wipe {
+  animation: wipe-reveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  clip-path: inset(0 100% 0 0);
+}
+
+.reveal-wipe-delay-1 { animation-delay: 0.1s; }
+.reveal-wipe-delay-2 { animation-delay: 0.25s; }
+.reveal-wipe-delay-3 { animation-delay: 0.4s; }
+.reveal-wipe-delay-4 { animation-delay: 0.55s; }
+
+/* Subtle slide-up fade for content blocks */
+@keyframes slide-up-reveal {
+  0%   { transform: translateY(16px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.reveal-up {
+  animation: slide-up-reveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+.reveal-up-delay-1 { animation-delay: 0.15s; }
+.reveal-up-delay-2 { animation-delay: 0.3s; }
+.reveal-up-delay-3 { animation-delay: 0.45s; }
+
+/* ============================================================================
+   MICRO-INTERACTIONS — Buttons & Interactive Elements
+   ============================================================================ */
+
+/* Scale + glow hover for action buttons */
+.btn-interactive {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.2s ease;
+}
+
+.btn-interactive:hover {
+  transform: scale(1.03) translateY(-1px);
+  box-shadow: 0 0 24px rgba(249, 115, 22, 0.15),
+              0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.btn-interactive:active {
+  transform: scale(0.98);
+  box-shadow: none;
+  transition-duration: 0.05s;
+}
+
+/* Subtle glow on any interactive card/element */
+.hover-glow {
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.hover-glow:hover {
+  box-shadow: 0 0 30px rgba(249, 115, 22, 0.08);
+  transform: translateY(-1px);
+}
+
+/* ============================================================================
+   CUSTOM SCROLLBAR
+   ============================================================================ */
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

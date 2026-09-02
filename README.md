@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🛡️ AI-Powered Fake Identity & Document Screening System
+# 🛡️ Sentinel — AI-Powered Fake Identity & Document Screening System
 ### Smart India Hackathon (SIH) 2026 — Problem Statement 26188
 **Organization:** Ministry of Home Affairs (MHA) | **Domain:** Border Control, Law Enforcement & eKYC Security
 
