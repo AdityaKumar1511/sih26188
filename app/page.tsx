@@ -346,21 +346,7 @@ function getApiBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, '');
   }
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (
-      host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host === '0.0.0.0' ||
-      host.startsWith('192.168.') ||
-      host.startsWith('10.') ||
-      host.startsWith('172.') ||
-      host.endsWith('.local')
-    ) {
-      return `http://${host}:8000`;
-    }
-  }
-  return 'http://localhost:8000';
+  return '/api/backend';
 }
 
 async function analyzeDocumentWithBiometrics(
