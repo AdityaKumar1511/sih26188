@@ -266,8 +266,19 @@ def perform_ocr(image_bytes: bytes) -> Dict[str, Any]:
 # WATERMARK & NOISE FILTERING
 # ==============================================================================
 
+_NOISE_STEMS = (
+    "GOVERN", "INDIA", "AUTHOR", "AADHAAR", "ADHAR", "UIDAI", "UNIQUE",
+    "IDENTIF", "INCOME", "TAX", "BHARAT", "SARKAR", "PEHCHAN", "ENROL",
+    "PASSPORT", "REPUBLIC", "MINISTRY", "EXTERNAL", "AFFAIRS", "DEPARTMENT",
+    "ACCOUNT", "MERA", "DOWNLOAD", "LETTER", "HELP", "WWW", "HTTP", "COM",
+    "MALE", "FEMALE", "DOB", "YEAR", "BIRTH", "SIGNATURE", "HOLDER", "PROOF",
+    "CITIZEN", "VERIF", "AUTHENTIC", "QR", "XML", "OFFLINE", "SCAN", "TOLL",
+    "FREE", "1947", "SAMPLE", "SPECIMEN", "WATERMARK", "STOCK", "SHUTTER",
+    "GETTY", "ALAMY", "DEPOSIT", "DREAMS", "ILLUSTRAT", "VECTOR", "OVERLAY",
+    "CANVAS", "SCREENING", "FATHER", "HUSBAND", "MOTHER", "GUARDIAN", "CARE"
+)
+
 _NOISE_KEYWORDS = frozenset([
-    # Government & Structural Headers
     "GOVERNMENT", "INDIA", "AUTHORITY", "AADHAAR", "UIDAI", "ISSUE",
     "UNIQUE", "IDENTIFICATION", "PRINT", "ADDRESS", "MERA", "PEHCHAN",
     "ENROLMENT", "ENROLLMENT", "INCOME", "TAX", "PERMANENT", "ACCOUNT",
@@ -278,12 +289,10 @@ _NOISE_KEYWORDS = frozenset([
     "CARE", "S/O", "D/O", "W/O", "C/O", "SO", "DO", "WO", "CO",
     "POST", "DISTRICT", "STATE", "PIN", "PINCODE", "PO", "VILLAGE",
     "ROAD", "STREET", "FLAT", "HOUSE", "BUILDING", "NAGAR", "COLONY",
-    # Passport Specific Terms
     "PASSPORT", "REPUBLIC", "NATIONALITY", "INDIAN", "HYDERABAD",
     "SURNAME", "GIVEN", "NAME", "NAMES", "SEX", "CODE", "TYPE",
     "COUNTRY", "PASSEPORT", "MINISTRY", "EXTERNAL", "AFFAIRS",
     "REGIONAL", "OFFICE", "OFFICER", "ASSISTANT", "FILE", "NO",
-    # Watermarks & Stock Sample Sites
     "SAMPLE", "SPECIMEN", "WATERMARK", "IMMIHELP", "IMMIHELP.COM",
     "SHUTTERSTOCK", "GETTY", "ALAMY", "DEPOSITPHOTOS", "DREAMSTIME",
     "STOCK", "PHOTO", "PREVIEW", "DEMO", "ILLUSTRATION", "VECTOR"
@@ -297,24 +306,28 @@ def _is_header_or_noise(text: str) -> bool:
         return True
 
     # Reject web domains, URLs, email addresses
-    if re.search(r'\.(COM|ORG|NET|IN|GOV|EDU|IO|CO|XYZ)\b', upper) or "HTTP" in upper or "WWW." in upper:
+    if re.search(r'\.(COM|ORG|NET|IN|GOV|EDU|IO|CO|XYZ)\b', upper) or "HTTP" in upper or "WWW." in upper or "@" in upper:
         return True
 
-    # Reject obvious watermark tokens
-    if any(wm in upper for wm in ["SAMPLE", "IMMIHELP", "SPECIMEN", "WATERMARK", "STOCK"]):
+    # Reject noise stems anywhere in the line (handles OCR corrupted headers like Emgovernment, Indiawerr)
+    if any(stem in upper for stem in _NOISE_STEMS):
+        return True
+
+    # Reject relative markers: S/O, D/O, W/O, C/O
+    if re.search(r'\b(S/O|D/O|W/O|C/O|SO|DO|WO|CO|FATHER|HUSBAND|MOTHER|GUARDIAN)\b', upper):
         return True
 
     words = [w.strip('.,:-/()[]{}') for w in upper.split() if w.strip('.,:-/()[]{}')]
     if not words:
         return True
 
-    noise_count = sum(1 for w in words if w in _NOISE_KEYWORDS)
-    if noise_count / len(words) >= 0.4:
+    noise_count = sum(1 for w in words if w in _NOISE_KEYWORDS or any(stem in w for stem in _NOISE_STEMS))
+    if noise_count / len(words) >= 0.3:
         return True
 
     # Reject lines that are mostly numeric
     digit_count = sum(1 for ch in text if ch.isdigit())
-    if digit_count / len(text) > 0.35:
+    if digit_count / len(text) > 0.3:
         return True
 
     return False
@@ -329,7 +342,8 @@ def _clean_name_candidate(text: str) -> str:
     for i, w in enumerate(words):
         w_clean = w.strip('. ')
         if len(w_clean) >= 2:
-            if w_clean.upper() not in _NOISE_KEYWORDS:
+            w_upper = w_clean.upper()
+            if w_upper not in _NOISE_KEYWORDS and not any(stem in w_upper for stem in _NOISE_STEMS):
                 filtered.append(w_clean.capitalize())
         elif i == len(words) - 1 and len(w_clean) == 1 and w.endswith('.'):
             filtered.append(w)
@@ -343,7 +357,7 @@ def _score_name_candidate(name: str) -> int:
     words = name.split()
     score = 0
     if 2 <= len(words) <= 4:
-        score += 35
+        score += 40
     elif len(words) == 1 and len(name) >= 4:
         score += 15
     avg_len = sum(len(w) for w in words) / len(words) if words else 0
@@ -360,37 +374,39 @@ def _extract_best_name(lines: List[str], dob_line_idx: int, all_texts: List[str]
     """Extracts best demographic name from OCR lines."""
     candidates: List[Tuple[str, int]] = []
 
-    # 1. Line immediately before DOB (strong Aadhaar signal)
+    # 1. Line immediately before DOB (strongest Aadhaar signal)
     if dob_line_idx > 0:
-        for offset in [1, 2]:
+        for offset in [1, 2, 3, 4]:
             idx = dob_line_idx - offset
             if 0 <= idx < len(lines):
                 raw_line = lines[idx]
                 if not _is_header_or_noise(raw_line):
                     name = _clean_name_candidate(raw_line)
-                    s = _score_name_candidate(name)
-                    if s > 0:
-                        candidates.append((name, s + 30))
+                    if name and not _is_header_or_noise(name):
+                        s = _score_name_candidate(name)
+                        if s > 0:
+                            candidates.append((name, s + 60 - (offset * 5)))
 
     # 2. Lines following explicit Name / Given Name labels
     for i, line in enumerate(lines):
         upper = line.upper().strip()
-        # Direct line pattern: Name: <Candidate>
         name_label_match = re.search(r'\b(?:NAME|FULL\s*NAME|GIVEN\s*NAME|GIVEN\s*NAMES|नाम)\s*[:\-]?\s*(.+)', upper)
         if name_label_match:
             cand_inline = _clean_name_candidate(name_label_match.group(1))
-            s_inline = _score_name_candidate(cand_inline)
-            if s_inline > 0:
-                candidates.append((cand_inline, s_inline + 40))
+            if cand_inline and not _is_header_or_noise(cand_inline):
+                s_inline = _score_name_candidate(cand_inline)
+                if s_inline > 0:
+                    candidates.append((cand_inline, s_inline + 50))
 
         if re.search(r'\b(GIVEN\s*NAME|GIVEN\s*NAMES|NAME|FULL\s*NAME|नाम)\b', upper):
             if i + 1 < len(lines):
                 raw = lines[i + 1]
                 if not _is_header_or_noise(raw):
                     name = _clean_name_candidate(raw)
-                    s = _score_name_candidate(name)
-                    if s > 0:
-                        candidates.append((name, s + 35))
+                    if name and not _is_header_or_noise(name):
+                        s = _score_name_candidate(name)
+                        if s > 0:
+                            candidates.append((name, s + 45))
 
     # 3. Consensus across all OCR passes
     for txt in all_texts:
@@ -398,9 +414,10 @@ def _extract_best_name(lines: List[str], dob_line_idx: int, all_texts: List[str]
             l_clean = l.strip()
             if not _is_header_or_noise(l_clean):
                 name = _clean_name_candidate(l_clean)
-                s = _score_name_candidate(name)
-                if s >= 40:
-                    candidates.append((name, s))
+                if name and not _is_header_or_noise(name):
+                    s = _score_name_candidate(name)
+                    if s >= 40:
+                        candidates.append((name, s))
 
     if not candidates:
         return None, 0
@@ -665,8 +682,15 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
     if parsed_dob:
         extracted["dob"] = parsed_dob
         extracted["confidence_scores"]["dob"] = get_real_confidence(parsed_dob, 88)
+        dob_digits = re.sub(r'[^0-9]', '', parsed_dob)
         for idx, l in enumerate(lines):
-            if parsed_dob in l or (parsed_dob[:2] in l and parsed_dob[-4:] in l):
+            clean_digits = re.sub(r'[^0-9]', '', l)
+            if (
+                parsed_dob in l
+                or (parsed_dob[:2] in l and parsed_dob[-4:] in l)
+                or (len(dob_digits) >= 4 and dob_digits[-4:] in clean_digits)
+                or re.search(r'\b(DOB|BIRTH|जन्म\s*तिथि|जन्म\s*वर्ष)\b', l, re.IGNORECASE)
+            ):
                 dob_line_idx = idx
                 break
 
