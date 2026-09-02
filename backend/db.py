@@ -71,15 +71,6 @@ MOCK_REGISTRY = [
         "dob": "1995-03-24",
         "status": "ACTIVE",
         "issuer": "INCOME_TAX_DEPT"
-    },
-    {
-        "doc_type": "AADHAAR",
-        "id_number": "266348132551",
-        "full_name": "YUVRAJ ATRI",
-        "dob": "2008-03-04",
-        "gender": "MALE",
-        "status": "ACTIVE",
-        "issuer": "UIDAI"
     }
 ]
 
