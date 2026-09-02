@@ -1,14 +1,14 @@
 import os
+import logging
 from io import BytesIO
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 
 import numpy as np
 import torch
 from PIL import Image
 from torch import nn
 
-_MODEL_CACHE: Dict[str, FaceDocumentCNN] = {}
-
+logger = logging.getLogger(__name__)
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
 MODEL_PATH = os.path.join(MODEL_DIR, "face_document_cnn.pth")
@@ -18,6 +18,8 @@ CLASS_NAMES = [
     "live_face",
     "spoof_face",
 ]
+
+_MODEL_CACHE: Dict[str, "FaceDocumentCNN"] = {}
 
 
 class FaceDocumentCNN(nn.Module):
@@ -69,17 +71,19 @@ class FaceDocumentCNN(nn.Module):
         if not isinstance(x, torch.Tensor):
             x = torch.tensor(x, dtype=torch.float32)
 
-        if x.dim() == 3:
-            x = x.unsqueeze(0)
-
         if x.dtype != torch.float32:
             x = x.to(torch.float32)
 
-        if x.shape[-1] == self.channels and x.shape[1] != self.channels:
-            x = x.permute(0, 3, 1, 2).contiguous()
-
-        if x.shape[1] != self.channels:
-            x = x.permute(0, 3, 1, 2).contiguous()
+        if x.dim() == 3:
+            # (H, W, C) -> (1, C, H, W) or (C, H, W) -> (1, C, H, W)
+            if x.shape[-1] == self.channels:
+                x = x.permute(2, 0, 1).unsqueeze(0).contiguous()
+            else:
+                x = x.unsqueeze(0).contiguous()
+        elif x.dim() == 4:
+            # (B, H, W, C) -> (B, C, H, W)
+            if x.shape[-1] == self.channels and x.shape[1] != self.channels:
+                x = x.permute(0, 3, 1, 2).contiguous()
 
         return self.classifier(self.feature_extractor(x))
 
@@ -107,7 +111,7 @@ def preprocess_image_bytes(image_bytes: bytes, image_size=(64, 64)) -> torch.Ten
     return tensor
 
 
-def get_model(model_path: str = MODEL_PATH, image_size=(64, 64)) -> FaceDocumentCNN | None:
+def get_model(model_path: str = MODEL_PATH, image_size=(64, 64)) -> Optional[FaceDocumentCNN]:
     """Return a cached model instance so repeated screening requests avoid reloading weights."""
     cache_key = f"{model_path}:{image_size[0]}x{image_size[1]}"
     if not os.path.exists(model_path):
@@ -135,7 +139,18 @@ def predict_screening_image(image_bytes: bytes, model_path: str = MODEL_PATH, im
             "details": f"No trained CNN model found at {model_path}.",
         }
 
-    tensor = preprocess_image_bytes(image_bytes, image_size=image_size)
+    try:
+        tensor = preprocess_image_bytes(image_bytes, image_size=image_size)
+    except Exception as e:
+        logger.warning(f"CNN image preprocessing failed: {e}")
+        return {
+            "predicted_label": "invalid_image",
+            "confidence": 0.0,
+            "class_scores": {label: 0.0 for label in CLASS_NAMES},
+            "is_safe": False,
+            "details": f"Corrupted or unreadable image data: {str(e)}",
+        }
+
     with torch.inference_mode():
         logits = model(tensor)
         probabilities = torch.softmax(logits, dim=1)[0]
