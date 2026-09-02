@@ -310,9 +310,6 @@ def _is_header_or_noise(text: str) -> bool:
     if re.search(r'\.(COM|ORG|NET|IN|GOV|EDU|IO|CO|XYZ)\b', upper) or "HTTP" in upper or "WWW." in upper or "@" in upper:
         return True
 
-    # Reject noise stems anywhere in the line (handles OCR corrupted headers like Emgovernment, Indiawerr)
-    if any(stem in upper for stem in _NOISE_STEMS):
-        return True
 
     # Reject relative markers: S/O, D/O, W/O, C/O
     if re.search(r'\b(S/O|D/O|W/O|C/O|SO|DO|WO|CO|FATHER|HUSBAND|MOTHER|GUARDIAN)\b', upper):
@@ -322,8 +319,8 @@ def _is_header_or_noise(text: str) -> bool:
     if not words:
         return True
 
-    noise_count = sum(1 for w in words if w in _NOISE_KEYWORDS or any(stem in w for stem in _NOISE_STEMS))
-    if noise_count / len(words) >= 0.3:
+    noise_count = sum(1 for w in words if w in _NOISE_KEYWORDS or any(w.startswith(stem) and len(stem) >= 4 for stem in _NOISE_STEMS))
+    if noise_count / len(words) > 0.5:
         return True
 
     # Reject lines that are mostly numeric
@@ -344,7 +341,7 @@ def _clean_name_candidate(text: str) -> str:
         w_clean = w.strip('. ')
         if len(w_clean) >= 2:
             w_upper = w_clean.upper()
-            if w_upper not in _NOISE_KEYWORDS and not any(stem in w_upper for stem in _NOISE_STEMS):
+            if w_upper not in _NOISE_KEYWORDS and not any(w_upper.startswith(stem) and len(stem) >= 4 for stem in _NOISE_STEMS):
                 filtered.append(w_clean.capitalize())
         elif i == len(words) - 1 and len(w_clean) == 1 and w.endswith('.'):
             filtered.append(w)
@@ -360,7 +357,7 @@ def _is_garbage_or_ocr_artifact(word: str) -> bool:
     if re.search(r'([A-Z])\1\1', w):
         return True
     # 3+ consecutive vowels or 4+ consecutive consonants (e.g. Foeeye, Muvajau)
-    if re.search(r'[AEIOU]{3,}', w) or re.search(r'[^AEIOUY]{4,}', w):
+    if re.search(r'[AEIOU]{3,}', w) or re.search(r'[^AEIOUY]{5,}', w):
         return True
     # Extremely abnormal vowel ratio
     vowels = sum(1 for ch in w if ch in "AEIOUY")

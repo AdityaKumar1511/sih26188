@@ -108,6 +108,18 @@ VALUES
         'De-listed Address', 
         'UIDAI', 
         'REVOKED'
+    ),
+    -- Legitimate Aadhaar #3 (Yuvraj Atri)
+    (
+        'AADHAAR', 
+        '266348132551', 
+        'YUVRAJ ATRI', 
+        NULL, 
+        '2008-03-04', 
+        'MALE', 
+        NULL, 
+        'UIDAI', 
+        'ACTIVE'
     )
 ON CONFLICT (doc_type, id_number) DO UPDATE 
 SET 
