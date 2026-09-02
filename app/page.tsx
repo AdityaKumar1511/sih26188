@@ -375,39 +375,27 @@ async function analyzeDocumentWithBiometrics(
     return docFileInput.mockResult;
   }
 
-  // Live File Upload -> Send to FastAPI Backend (with multi-endpoint fallback)
+  // Live File Upload -> Send to FastAPI Backend
   const formData = new FormData();
   formData.append('file', docFileInput as File);
   if (liveFaceInput) {
     formData.append('live_face', liveFaceInput);
   }
 
-  const primaryUrl = getApiBaseUrl();
-  const fallbackUrl = primaryUrl.includes('localhost')
-    ? 'https://sih26188-naq6.onrender.com'
-    : 'http://localhost:8000';
-
-  let response: Response | null = null;
+  const baseUrl = getApiBaseUrl();
 
   try {
-    response = await fetch(`${primaryUrl}/extract-and-validate`, {
+    const response = await fetch(`${baseUrl}/extract-and-validate`, {
       method: 'POST',
       body: formData,
       signal,
     });
-  } catch (err) {
-    console.warn(`Primary API at ${primaryUrl} unreachable. Trying fallback at ${fallbackUrl}...`);
-    try {
-      response = await fetch(`${fallbackUrl}/extract-and-validate`, {
-        method: 'POST',
-        body: formData,
-      });
-    } catch (fallbackErr) {
-      console.warn('Fallback server unreachable.');
-    }
-  }
 
-  if (response && response.ok) {
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Screening API error');
+    }
+
     const data = await response.json();
 
     let biometricRes: BiometricResult | undefined = undefined;
@@ -460,7 +448,7 @@ async function analyzeDocumentWithBiometrics(
           doc_type: data.document_type,
           verdict: data.verdict,
           authenticity_score: data.authenticity_score,
-          checksum_passed: data.checksum_result?.passed ?? true
+          checksum_passed: data.checksum_result.passed
         }
       };
     }
@@ -468,20 +456,20 @@ async function analyzeDocumentWithBiometrics(
     return {
       authenticityScore: data.authenticity_score,
       verdict: data.verdict,
-      verdictDescription: `${data.verdict === 'AUTHENTIC' ? 'Verified Authentic' : (data.verdict === 'TAMPERED' ? 'Tampering / Forgery Detected' : 'Suspicious / Unverified Identity')}. ${data.checksum_result?.details || 'Checksum check passed.'}`,
+      verdictDescription: `${data.verdict === 'AUTHENTIC' ? 'Verified Authentic' : (data.verdict === 'TAMPERED' ? 'Tampering / Forgery Detected' : 'Suspicious / Unverified Identity')}. ${data.checksum_result.details}`,
       processingTimeMs: data.processing_time_ms,
       documentType: data.document_type,
       confidence: data.confidence,
       boundingBoxes: [
         {
           id: 'b1',
-          label: data.checksum_result?.passed ? 'Verified Checksum' : 'Checksum Anomaly',
-          type: data.checksum_result?.passed ? 'info' : 'critical',
+          label: data.checksum_result.passed ? 'Verified Checksum' : 'Checksum Anomaly',
+          type: data.checksum_result.passed ? 'info' : 'critical',
           x: 25,
           y: 42,
           width: 50,
           height: 18,
-          description: data.checksum_result?.details || 'Algorithmic checksum verified',
+          description: data.checksum_result.details,
           confidence: data.confidence
         },
         ...(biometricRes ? [{
@@ -507,14 +495,14 @@ async function analyzeDocumentWithBiometrics(
           confidence: 0.95
         }] : [])
       ],
-      extractedFields: (data.extracted_fields || []).map((f: any) => ({
+      extractedFields: data.extracted_fields.map((f: any) => ({
         fieldName: f.field_name,
         value: f.value || 'N/A',
         status: f.status,
         confidence: f.confidence,
         anomalyDetails: f.anomaly_details
       })),
-      validationChecks: (data.validation_checks || []).map((c: any) => ({
+      validationChecks: data.validation_checks.map((c: any) => ({
         id: c.id,
         name: c.name,
         category: c.category,
@@ -522,68 +510,14 @@ async function analyzeDocumentWithBiometrics(
         details: c.details,
         score: c.score
       })),
-      forensicTrace: data.forensic_trace || [],
+      forensicTrace: data.forensic_trace,
       biometricResult: biometricRes,
       blockchainAnchor: blockchainAnchorRes
     };
+  } catch (error: any) {
+    console.error('Backend connection failed:', error);
+    throw new Error(error.message || 'Could not connect to FastAPI screening engine at ' + baseUrl);
   }
-
-  // Graceful offline fallback
-  return {
-    authenticityScore: 92,
-    verdict: 'AUTHENTIC',
-    verdictDescription: 'Verified Authentic. Document format, OCR layout, and checksums verified.',
-    processingTimeMs: 480,
-    documentType: 'Aadhaar Card (UIDAI Standard)',
-    confidence: 0.95,
-    boundingBoxes: [
-      {
-        id: 'b1',
-        label: 'Verified Checksum & Structural Integrity',
-        type: 'info',
-        x: 25,
-        y: 42,
-        width: 50,
-        height: 18,
-        description: 'Verhoeff check digit passed (UIDAI spec v3.2)',
-        confidence: 0.98
-      }
-    ],
-    extractedFields: [
-      { fieldName: 'Full Name', value: 'RAJESH KUMAR SHARMA', status: 'verified', confidence: 98 },
-      { fieldName: 'Aadhaar Number', value: '5489 2104 9811', status: 'verified', confidence: 99 },
-      { fieldName: 'Date of Birth', value: '14/08/1988', status: 'verified', confidence: 96 }
-    ],
-    validationChecks: [
-      { id: 'c1', name: 'Document Layout & OCR Extraction', category: 'Structural', status: 'pass', details: 'Template coordinates matched standard format', score: 95 },
-      { id: 'c2', name: 'Verhoeff Checksum Algorithm', category: 'Algorithmic', status: 'pass', details: 'Aadhaar 12-digit Verhoeff checksum valid', score: 100 },
-      { id: 'c3', name: 'Error Level Analysis (ELA)', category: 'Forensic', status: 'pass', details: 'Uniform JPEG compression map across canvas', score: 94 }
-    ],
-    forensicTrace: [
-      `Ingested document scan '${(docFileInput as File).name}'.`,
-      `Single-pass OCR: Checksum check passed.`,
-      `Multi-step OCR bypassed.`,
-      `Blockchain hash anchored to immutable ledger.`
-    ],
-    blockchainAnchor: {
-      verdictHash: `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`,
-      txHash: `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`,
-      blockNumber: 104822,
-      network: 'Polygon PoS (Amoy Testnet - EVM)',
-      explorerUrl: `https://amoy.polygonscan.com/tx/0x${Math.random().toString(16).slice(2)}`,
-      timestampIso: new Date().toISOString(),
-      status: 'CONFIRMED_ON_CHAIN',
-      previousBlockHash: '0x12a8f9c0b1154c13a00c14b2d56a798fe8d904b73e89547d6c6e7a2b9c0d1e2f',
-      merkleRoot: '0x6fbc268d87a4128f73b64f9b8c0df1d8591e988220c35f2a1a8c3d9051d95392',
-      nonPiiDigestPreview: {
-        agency: 'Ministry of Home Affairs - PS26188',
-        doc_type: 'Aadhaar Card',
-        verdict: 'AUTHENTIC',
-        authenticity_score: 92,
-        checksum_passed: true
-      }
-    }
-  };
 }
 
 async function exportPdfAuditReport(screeningResult: ScreeningResult) {
@@ -777,14 +711,6 @@ export default function DocumentScreeningApp() {
     }
   }, [isCameraActive]);
 
-  // Pre-warm backend service on initial page mount (wakes up cloud containers in advance)
-  useEffect(() => {
-    try {
-      const baseUrl = getApiBaseUrl();
-      fetch(`${baseUrl}/health`).catch(() => {});
-    } catch {}
-  }, []);
-
   // Clean up object URLs and camera on unmount
   useEffect(() => {
     return () => {
@@ -917,27 +843,26 @@ export default function DocumentScreeningApp() {
     }
 
     setAppState('processing');
-    setProcessingProgress(8);
+    setProcessingProgress(12);
     setCurrentStepIndex(0);
     setOfficerDecision(null);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 45000);
 
-    // Smooth asymptotic progress ticker synced across pipeline stages
-    let currentPct = 8;
-    const progressTimer = setInterval(() => {
-      // Asymptotically approach 92% smoothly without freezing or jumping
-      const increment = Math.max(0.4, (92 - currentPct) * 0.045);
-      currentPct = Math.min(92, currentPct + increment);
-      const roundedPct = Math.round(currentPct);
-      setProcessingProgress(roundedPct);
+    const progressInterval = setInterval(() => {
+      setProcessingProgress((prev) => {
+        if (prev >= 88) return 88;
+        return prev + 8;
+      });
+    }, 350);
 
-      // Dynamically calculate active step based on progress threshold
-      const totalSteps = processingSteps.length;
-      const targetStep = Math.min(totalSteps - 1, Math.floor((currentPct / 92) * totalSteps));
-      setCurrentStepIndex(targetStep);
-    }, 180);
+    const stepInterval = setInterval(() => {
+      setCurrentStepIndex((prev) => {
+        if (prev < processingSteps.length - 1) return prev + 1;
+        return prev;
+      });
+    }, 450);
 
     try {
       const input = selectedPreset || selectedFile!;
@@ -951,9 +876,9 @@ export default function DocumentScreeningApp() {
         result.biometricResult = undefined;
       }
 
-      clearInterval(progressTimer);
+      clearInterval(progressInterval);
+      clearInterval(stepInterval);
       clearTimeout(timeoutId);
-      setCurrentStepIndex(processingSteps.length - 1);
       setProcessingProgress(100);
 
       setTimeout(() => {
@@ -964,12 +889,13 @@ export default function DocumentScreeningApp() {
           setActiveTab('biometrics');
         }
         setAppState('results');
-      }, 350);
+      }, 300);
     } catch (err: any) {
-      clearInterval(progressTimer);
+      clearInterval(progressInterval);
+      clearInterval(stepInterval);
       clearTimeout(timeoutId);
       if (err?.name === 'AbortError') {
-        alert('Screening timed out. The backend is taking too long or is not reachable.');
+        alert('Screening timed out. The backend is taking too long or is not reachable on localhost:8000.');
       } else {
         alert(`Error analyzing document: ${err.message || 'Server connection failed'}`);
       }

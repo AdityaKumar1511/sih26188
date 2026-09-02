@@ -4,16 +4,9 @@ from io import BytesIO
 from typing import Dict, Tuple, Optional
 
 import numpy as np
+import torch
 from PIL import Image
-
-try:
-    import torch
-    from torch import nn
-    _TORCH_AVAILABLE = True
-except ImportError:
-    torch = None
-    nn = None
-    _TORCH_AVAILABLE = False
+from torch import nn
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +19,13 @@ CLASS_NAMES = [
     "spoof_face",
 ]
 
-_MODEL_CACHE: Dict[str, Any] = {} if _TORCH_AVAILABLE else {}
+_MODEL_CACHE: Dict[str, "FaceDocumentCNN"] = {}
 
 
-class FaceDocumentCNN(nn.Module if _TORCH_AVAILABLE else object):
+class FaceDocumentCNN(nn.Module):
     """CNN for face identity matching and document authenticity screening."""
 
     def __init__(self, input_shape: Tuple[int, int, int] = (64, 64, 3), num_classes: int = 4):
-        if not _TORCH_AVAILABLE:
-            return
         super().__init__()
         self.input_shape = (None, *input_shape)
         self.output_shape = (None, num_classes)
@@ -120,10 +111,8 @@ def preprocess_image_bytes(image_bytes: bytes, image_size=(64, 64)) -> torch.Ten
     return tensor
 
 
-def get_model(model_path: str = MODEL_PATH, image_size=(64, 64)) -> Optional[Any]:
+def get_model(model_path: str = MODEL_PATH, image_size=(64, 64)) -> Optional[FaceDocumentCNN]:
     """Return a cached model instance so repeated screening requests avoid reloading weights."""
-    if not _TORCH_AVAILABLE:
-        return None
     cache_key = f"{model_path}:{image_size[0]}x{image_size[1]}"
     if not os.path.exists(model_path):
         return None

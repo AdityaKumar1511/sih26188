@@ -65,13 +65,10 @@ def get_easyocr_reader() -> Any:
     return _easyocr_reader
 
 
-from validators import validate_verhoeff, validate_aadhaar_number, validate_pan_number, validate_passport_number, parse_mrz_td3
-
-
 def preprocess_image(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
     """
     Applies optimized, high-performance image enhancement pipelines.
-    Handles EXIF orientation and resizes large camera scans (e.g. 4K down to max 1280px) before processing.
+    Handles EXIF orientation, contrast stretching, CLAHE, adaptive thresholding, and denoising.
     """
     try:
         pil_image = Image.open(io.BytesIO(image_bytes))
@@ -88,27 +85,26 @@ def preprocess_image(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
     open_cv_image = np.array(pil_image)
     open_cv_image = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2BGR)
 
-    # 1. Constrain dimensions: Max 1280px for speed, Min 960px for clarity
+    # 1. Resize if image is too small or excessively large
     h, w = open_cv_image.shape[:2]
-    max_dim = max(h, w)
-    if max_dim > 1280:
-        scale_factor = 1280.0 / max_dim
-        open_cv_image = cv2.resize(
-            open_cv_image,
-            (int(w * scale_factor), int(h * scale_factor)),
-            interpolation=cv2.INTER_AREA
-        )
-    elif w < 960:
-        scale_factor = 960.0 / max(w, 1)
+    if w < 1200:
+        scale_factor = 1200 / max(w, 1)
         open_cv_image = cv2.resize(
             open_cv_image,
             (int(w * scale_factor), int(h * scale_factor)),
             interpolation=cv2.INTER_CUBIC
         )
+    elif w > 3200:
+        scale_factor = 2400 / w
+        open_cv_image = cv2.resize(
+            open_cv_image,
+            (int(w * scale_factor), int(h * scale_factor)),
+            interpolation=cv2.INTER_AREA
+        )
 
     # 2. Grayscale & CLAHE (Contrast-Limited Adaptive Histogram Equalization)
     gray = cv2.cvtColor(open_cv_image, cv2.COLOR_BGR2GRAY)
-    clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
     clahe_img = clahe.apply(gray)
     results.append(("clahe", Image.fromarray(clahe_img)))
 
@@ -129,37 +125,10 @@ def preprocess_image(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
     return results
 
 
-def _has_approved_checksum(text: str) -> Tuple[bool, str]:
-    """
-    Scans extracted OCR text for an approved algorithmic checksum (Aadhaar Verhoeff, PAN format, MRZ).
-    """
-    # 1. Aadhaar 12-digit Verhoeff Check
-    aadhaar_matches = re.findall(r'\b(\d{4}\s?\d{4}\s?\d{4})\b', text)
-    for m in aadhaar_matches:
-        clean_num = re.sub(r'\s+', '', m)
-        if len(clean_num) == 12 and validate_verhoeff(clean_num):
-            return True, f"Aadhaar Verhoeff Checksum Passed ({clean_num})"
-
-    # 2. PAN Format Check (5 letters + 4 digits + 1 letter)
-    pan_matches = re.findall(r'\b([A-Z]{5}[0-9]{4}[A-Z])\b', text)
-    if pan_matches:
-        return True, f"Valid PAN Syntax Verified ({pan_matches[0]})"
-
-    # 3. Passport MRZ Check
-    if "P<" in text or re.search(r'[A-Z0-9<]{30,}', text):
-        lines = [line.strip() for line in text.split('\n') if len(line.strip()) >= 30]
-        if len(lines) >= 2:
-            mrz_res = parse_mrz_td3(lines[-2:])
-            if mrz_res.get("valid"):
-                return True, "Passport ICAO MRZ Check-Digits Passed"
-
-    return False, ""
-
-
 def perform_ocr(image_bytes: bytes) -> Dict[str, Any]:
     """
-    Executes fast, targeted OCR on document image.
-    If first check gives an approved checksum, multi-step OCR passes are bypassed immediately.
+    Executes fast, targeted multi-pass OCR on document image.
+    Uses PSM 6 (uniform block) and PSM 3 (auto page segmentation).
     """
     preprocessed_images = preprocess_image(image_bytes)
     raw_pil = preprocessed_images[0][1]
@@ -174,68 +143,72 @@ def perform_ocr(image_bytes: bytes) -> Dict[str, Any]:
             txt1, txt2, txt3 = "", "", ""
             # Pass 1: CLAHE image with PSM 6 (best for identity card layouts)
             clahe_img = next((img for label, img in preprocessed_images if label == "clahe"), raw_pil)
+            txt1 = pytesseract.image_to_string(clahe_img, lang='eng', config='--psm 6').strip()
             
             pass1_ocr_data = []
             avg_word_conf = 0.0
-            
-            # Extract both bounding boxes and text from single Pass 1 call
-            try:
-                data_dict = pytesseract.image_to_data(clahe_img, lang='eng', config='--psm 6', output_type=pytesseract.Output.DICT)
-                word_confs = []
-                words = []
-                for i in range(len(data_dict['text'])):
-                    t = data_dict['text'][i].strip()
-                    conf = int(data_dict['conf'][i])
-                    if t and conf > 15:
-                        pass1_ocr_data.append({
-                            "text": t,
-                            "conf": conf,
-                            "left": data_dict['left'][i],
-                            "top": data_dict['top'][i],
-                            "width": data_dict['width'][i],
-                            "height": data_dict['height'][i]
-                        })
-                        word_confs.append(conf)
-                        words.append(t)
-                
-                txt1 = " ".join(words).strip()
-                if word_confs:
-                    avg_word_conf = sum(word_confs) / len(word_confs)
-            except Exception as e:
-                logger.debug(f"image_to_data error in Pass 1: {e}")
-                txt1 = pytesseract.image_to_string(clahe_img, lang='eng', config='--psm 6').strip()
-
             if txt1:
                 all_texts.append(txt1)
                 best_text = txt1
                 engine_used = "tesseract"
-                ocr_data = pass1_ocr_data
 
-            # Check if Pass 1 gives an approved checksum or clean identity fields
-            checksum_approved, checksum_reason = _has_approved_checksum(txt1)
+                # Extract word bounding boxes and confidences from CLAHE image
+                try:
+                    data_dict = pytesseract.image_to_data(clahe_img, output_type=pytesseract.Output.DICT)
+                    word_confs = []
+                    for i in range(len(data_dict['text'])):
+                        t = data_dict['text'][i].strip()
+                        conf = int(data_dict['conf'][i])
+                        if t and conf > 15:
+                            pass1_ocr_data.append({
+                                "text": t,
+                                "conf": conf,
+                                "left": data_dict['left'][i],
+                                "top": data_dict['top'][i],
+                                "width": data_dict['width'][i],
+                                "height": data_dict['height'][i]
+                            })
+                            word_confs.append(conf)
+                    if word_confs:
+                        avg_word_conf = sum(word_confs) / len(word_confs)
+                except Exception as e:
+                    logger.debug(f"image_to_data error in Pass 1: {e}")
 
-            if checksum_approved or (len(txt1) > 25 and avg_word_conf >= 55):
+            ocr_data = pass1_ocr_data
+
+            # Early Exit Check: If Pass 1 produced substantial text with high confidence, skip Passes 2 & 3
+            if len(txt1) > 40 and avg_word_conf >= 70:
                 logger.info(
-                    f"OCR Pass 1 verified: {checksum_reason or 'Clean OCR'} ({len(txt1)} chars, conf: {avg_word_conf:.1f}%). "
-                    f"Multi-step OCR bypassed."
+                    f"OCR Pass 1 produced clean result ({len(txt1)} chars, avg conf: {avg_word_conf:.1f}%). "
+                    f"Early exit triggered — skipping Passes 2 & 3."
                 )
             else:
                 logger.info(
                     f"OCR Pass 1 result ({len(txt1)} chars, avg conf: {avg_word_conf:.1f}%) below threshold. "
-                    f"Executing fallback single pass."
+                    f"Executing multi-pass OCR (Passes 2 & 3)."
                 )
-                # Pass 2: Fallback PSM 3 auto segmentation only if Pass 1 was empty
-                if not txt1:
-                    txt2 = pytesseract.image_to_string(raw_pil, lang='eng', config='--psm 3').strip()
-                    if txt2:
-                        all_texts.append(txt2)
+                # Pass 2: Raw / Grayscale image with PSM 3 (auto segmentation)
+                txt2 = pytesseract.image_to_string(raw_pil, lang='eng', config='--psm 3').strip()
+                if txt2:
+                    all_texts.append(txt2)
+                    if len(txt2) > len(best_text):
                         best_text = txt2
                         engine_used = "tesseract"
+
+                # Pass 3: Thresholded image with PSM 6 (great for MRZ / stamped text)
+                thresh_img = next((img for label, img in preprocessed_images if label == "threshold"), None)
+                if thresh_img:
+                    txt3 = pytesseract.image_to_string(thresh_img, lang='eng', config='--psm 6').strip()
+                    if txt3:
+                        all_texts.append(txt3)
+                        if len(txt3) > len(best_text):
+                            best_text = txt3
+                            engine_used = "tesseract"
 
                 # If a later pass yielded the best text, extract word boxes from that image
                 if best_text and (not ocr_data or best_text != txt1):
                     try:
-                        target_img = raw_pil if best_text == txt2 else clahe_img
+                        target_img = thresh_img if (thresh_img is not None and best_text == txt3) else (raw_pil if best_text == txt2 else clahe_img)
                         data_dict = pytesseract.image_to_data(target_img, output_type=pytesseract.Output.DICT)
                         new_ocr_data = []
                         for i in range(len(data_dict['text'])):
