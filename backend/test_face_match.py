@@ -3,7 +3,13 @@ Unit & Integration Tests for Biometric Face Matching Engine (SIH PS 26188)
 Run with: ./venv/bin/python test_face_match.py
 """
 
+import sys
+import os
 import io
+
+# Add backend directory to sys.path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw
@@ -51,12 +57,12 @@ def test_face_detection_and_liveness():
     
     detection = detect_face(face_np)
     assert detection is not None, "Failed to detect face on test portrait"
-    print(f" [✓] Face detected via: {detection['detector']} (Confidence: {detection['confidence']}%)")
+    print(f" [PASS] Face detected via: {detection['detector']} (Confidence: {detection['confidence']}%)")
 
     liveness = compute_passive_liveness(face_np, detection["crop"])
     assert liveness is not None
     assert "liveness_score" in liveness
-    print(f" [✓] Passive Liveness evaluated: Score {liveness['liveness_score']}/100 ({liveness['liveness_status']})")
+    print(f" [PASS] Passive Liveness evaluated: Score {liveness['liveness_score']}/100 ({liveness['liveness_status']})")
 
 
 def test_1to1_matching():
@@ -70,12 +76,12 @@ def test_1to1_matching():
     # Match 1: Same person
     match_res = match_faces_1to1(face1_bytes, face1_variant_bytes)
     assert match_res["success"] is True
-    print(f" [✓] Same-person match tested: Score = {match_res['match_score']}%, Verdict = {match_res['verdict']}")
+    print(f" [PASS] Same-person match tested: Score = {match_res['match_score']}%, Verdict = {match_res['verdict']}")
 
     # Match 2: Impersonation / Mismatched pair
     diff_res = match_faces_1to1(face1_bytes, face2_impersonator_bytes)
     assert diff_res["success"] is True
-    print(f" [✓] Impersonation test: Score = {diff_res['match_score']}%, Verdict = {diff_res['verdict']}")
+    print(f" [PASS] Impersonation test: Score = {diff_res['match_score']}%, Verdict = {diff_res['verdict']}")
 
 
 def test_fastapi_match_endpoint():
@@ -98,16 +104,13 @@ def test_fastapi_match_endpoint():
     assert "liveness_score" in data
     assert data["doc_face_crop_base64"] is not None
     assert data["live_face_crop_base64"] is not None
-    print(f" [✓] /match-face endpoint returned 200 OK:")
-    print(f"     Verdict: {data['verdict']}")
-    print(f"     Match Score: {data['match_score']}%")
-    print(f"     Liveness: {data['liveness_status']} ({data['liveness_score']}/100)")
-    print(f"     Doc Face Crop: {data['doc_face_crop_base64'][:40]}...")
-    print(f"     Live Face Crop: {data['live_face_crop_base64'][:40]}...")
+    print(f" [PASS] /match-face endpoint returned 200 OK:")
+    print(f"       Verdict: {data['verdict']} | Score: {data['match_score']}% | Cosine: {data['cosine_similarity']}")
+    print(f"       Liveness: {data['liveness_status']} ({data['liveness_score']}%)")
 
 
 if __name__ == "__main__":
     test_face_detection_and_liveness()
     test_1to1_matching()
     test_fastapi_match_endpoint()
-    print("\n[ALL BIOMETRIC TESTS PASSED SUCCESSFULLY!]")
+    print("\n[ALL BIOMETRIC & FACE MATCHING TESTS PASSED SUCCESSFULLY!]")

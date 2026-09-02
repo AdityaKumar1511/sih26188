@@ -84,7 +84,7 @@ try:
         res = supabase.table("government_id_registry").upsert(rec, on_conflict="doc_type,id_number").execute()
         print(f" [+] Upserted: {rec['doc_type']} - {rec['id_number']} ({rec['full_name']})")
 
-    print("[✓] Supabase database seed completed successfully!")
+    print("[PASS] Supabase database seed completed successfully!")
 
 except Exception as err:
-    print(f"[x] Error during Supabase seeding: {err}")
+    print(f"[ERROR] Error during Supabase seeding: {err}")
