@@ -97,6 +97,18 @@ VALUES
         'INCOME_TAX_DEPT', 
         'ACTIVE'
     ),
+    -- Legitimate Aadhaar #3 (Yuvraj Atri)
+    (
+        'AADHAAR', 
+        '266348132551', 
+        'YUVRAJ ATRI', 
+        NULL, 
+        '2008-03-04', 
+        'MALE', 
+        NULL, 
+        'UIDAI', 
+        'ACTIVE'
+    ),
     -- Revoked / Flagged Aadhaar (for testing fraudulent screening)
     (
         'AADHAAR', 
