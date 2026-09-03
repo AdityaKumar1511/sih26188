@@ -3,26 +3,48 @@
 @tailwind utilities;
 
 :root {
-  --bg-dark: #050505;
-  --surface-card: #121212;
+  --bg-dark: #0A1931;
+  --surface-card: #1A3D63;
+  --accent-primary: #4A7FA7;
+  --accent-light: #B3CFE5;
+  --accent-pale: #F6FAFD;
   --font-display: 'Space Grotesk', system-ui, sans-serif;
   --font-body: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 }
 
 body {
-  background-color: #050505;
-  color: #f5f5f5;
+  background-color: #0A1931;
+  color: #F6FAFD;
   font-family: var(--font-body);
   overflow-x: hidden;
   position: relative;
 }
 
-/* Hide default cursor on desktop pointer devices */
-@media (pointer: fine) {
-  html, body, *, *::before, *::after, button, a, input, select, textarea {
-    cursor: none !important;
-  }
+/* Normal cursor — standard browser behavior */
+html, body {
+  cursor: default !important;
+}
+
+button, a, select, [role="button"], .cursor-pointer {
+  cursor: pointer !important;
+}
+
+input, textarea {
+  cursor: text !important;
+}
+
+/* Hide any custom cursor floating overlay if rendered */
+.grid-spotlight,
+.z-\[99999\],
+[class*="z-[99999]"] {
+  display: none !important;
+}
+
+/* Navbar background matching UI background */
+header {
+  background-color: rgba(10, 25, 49, 0.95) !important;
+  border-bottom-color: rgba(74, 127, 167, 0.25) !important;
 }
 
 /* Film grain / noise texture overlay — kills the flat generic dark theme look */
@@ -46,8 +68,8 @@ body::after {
   z-index: 0;
   pointer-events: none;
   background-image: 
-    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    linear-gradient(to right, rgba(179, 207, 229, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(179, 207, 229, 0.05) 1px, transparent 1px);
   background-size: 60px 60px;
   filter: blur(1.5px);
   mask-image: radial-gradient(ellipse 85% 75% at 50% 35%, black 25%, transparent 85%);
@@ -62,9 +84,9 @@ body::after {
   z-index: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(to right, rgba(249, 115, 22, 0.28) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(249, 115, 22, 0.28) 1px, transparent 1px),
-    radial-gradient(380px circle at var(--mouse-x, -500px) var(--mouse-y, -500px), rgba(249, 115, 22, 0.06), transparent 70%);
+    linear-gradient(to right, rgba(74, 127, 167, 0.28) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(74, 127, 167, 0.28) 1px, transparent 1px),
+    radial-gradient(380px circle at var(--mouse-x, -500px) var(--mouse-y, -500px), rgba(74, 127, 167, 0.08), transparent 70%);
   background-size: 60px 60px, 60px 60px, 100% 100%;
   mask-image: radial-gradient(420px circle at var(--mouse-x, -500px) var(--mouse-y, -500px), black 0%, transparent 100%);
   -webkit-mask-image: radial-gradient(420px circle at var(--mouse-x, -500px) var(--mouse-y, -500px), black 0%, transparent 100%);
@@ -94,13 +116,13 @@ body::after {
 
 .matte-card {
   background:
-    linear-gradient(#121212, #121212) padding-box,
-    linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 50%, transparent 100%) border-box;
+    linear-gradient(#1A3D63, #1A3D63) padding-box,
+    linear-gradient(180deg, rgba(179,207,229,0.12) 0%, rgba(179,207,229,0.04) 50%, transparent 100%) border-box;
   border: 1px solid transparent;
   border-radius: 0.75rem;
   box-shadow:
-    inset 0 1px 0 0 rgba(255,255,255,0.04),
-    inset 0 0 20px 0 rgba(0,0,0,0.25),
+    inset 0 1px 0 0 rgba(179,207,229,0.06),
+    inset 0 0 20px 0 rgba(10,25,49,0.35),
     0 1px 3px 0 rgba(0,0,0,0.4);
 }
 
@@ -109,13 +131,13 @@ body::after {
 }
 .matte-card-hover:hover {
   background:
-    linear-gradient(#171717, #141414) padding-box,
-    linear-gradient(180deg, rgba(249,115,22,0.35) 0%, rgba(249,115,22,0.08) 50%, transparent 100%) border-box;
+    linear-gradient(#1e4570, #1A3D63) padding-box,
+    linear-gradient(180deg, rgba(74,127,167,0.45) 0%, rgba(74,127,167,0.12) 50%, transparent 100%) border-box;
   border: 1px solid transparent;
   box-shadow:
-    inset 0 1px 0 0 rgba(249,115,22,0.1),
-    inset 0 0 20px 0 rgba(0,0,0,0.2),
-    0 0 20px 0 rgba(249,115,22,0.06),
+    inset 0 1px 0 0 rgba(74,127,167,0.15),
+    inset 0 0 20px 0 rgba(10,25,49,0.2),
+    0 0 20px 0 rgba(74,127,167,0.1),
     0 2px 8px 0 rgba(0,0,0,0.5);
 }
 
@@ -145,12 +167,12 @@ body::after {
   top: 0;
   background: linear-gradient(90deg,
     transparent 0%,
-    rgba(249, 115, 22, 0.15) 15%,
-    rgba(249, 115, 22, 0.6) 50%,
-    rgba(249, 115, 22, 0.15) 85%,
+    rgba(74, 127, 167, 0.15) 15%,
+    rgba(179, 207, 229, 0.7) 50%,
+    rgba(74, 127, 167, 0.15) 85%,
     transparent 100%
   );
-  box-shadow: 0 0 12px 2px rgba(249, 115, 22, 0.15);
+  box-shadow: 0 0 12px 2px rgba(74, 127, 167, 0.2);
   animation: scanline-sweep 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   pointer-events: none;
   z-index: 10;
@@ -159,12 +181,12 @@ body::after {
 .scan-zone:hover::after {
   background: linear-gradient(90deg,
     transparent 0%,
-    rgba(249, 115, 22, 0.25) 15%,
-    rgba(249, 115, 22, 0.9) 50%,
-    rgba(249, 115, 22, 0.25) 85%,
+    rgba(74, 127, 167, 0.3) 15%,
+    rgba(179, 207, 229, 1.0) 50%,
+    rgba(74, 127, 167, 0.3) 85%,
     transparent 100%
   );
-  box-shadow: 0 0 20px 4px rgba(249, 115, 22, 0.25);
+  box-shadow: 0 0 20px 4px rgba(74, 127, 167, 0.3);
 }
 
 /* Status pill scanning line — sweeps across like a live indicator */
@@ -187,7 +209,7 @@ body::after {
   height: 100%;
   background: linear-gradient(90deg,
     transparent,
-    rgba(74, 222, 128, 0.12),
+    rgba(179, 207, 229, 0.15),
     transparent
   );
   animation: pill-scan 3s ease-in-out infinite;
@@ -238,7 +260,7 @@ body::after {
 
 .btn-interactive:hover {
   transform: scale(1.03) translateY(-1px);
-  box-shadow: 0 0 24px rgba(249, 115, 22, 0.15),
+  box-shadow: 0 0 24px rgba(74, 127, 167, 0.2),
               0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
@@ -254,7 +276,7 @@ body::after {
 }
 
 .hover-glow:hover {
-  box-shadow: 0 0 30px rgba(249, 115, 22, 0.08);
+  box-shadow: 0 0 30px rgba(74, 127, 167, 0.12);
   transform: translateY(-1px);
 }
 
@@ -267,12 +289,12 @@ body::after {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #050505;
+  background: #0A1931;
 }
 ::-webkit-scrollbar-thumb {
-  background: #262626;
+  background: #1A3D63;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #ea580c;
+  background: #4A7FA7;
 }
