@@ -981,91 +981,185 @@ export default function DocumentScreeningApp() {
         
         {/* STATE 1: UPLOAD & BIOMETRIC CAPTURE SCREEN */}
         {appState === 'upload' && (
-          <div className="space-y-10 my-auto py-10 sm:py-16 lg:py-20">
+          <div className="space-y-16 py-6 sm:py-10">
             
-            {/* Top of Home Page: Screening Mode Switcher (Moved out of Navbar) */}
-            <ScrollReveal direction="down" delay={0.05} distance={20} className="flex flex-col items-center justify-center">
-              <div className="flex items-center p-1.5 rounded-full bg-[#12161F]/90 border border-white/[0.08] shadow-[0_4px_24px_rgba(0,0,0,0.5)] backdrop-blur-md">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isCameraActive) stopCamera();
-                    setAppMode('egate_kiosk');
-                  }}
-                  className={`relative px-5 py-2.5 rounded-full text-xs font-semibold flex items-center gap-2 transition-all duration-300 ease-out cursor-pointer ${
-                    appMode === 'egate_kiosk'
-                      ? 'bg-gradient-to-r from-[#FFB454] to-[#FF8A3D] text-[#0A0E14] font-bold shadow-[0_0_18px_rgba(255,180,84,0.35)] scale-[1.02]'
-                      : 'text-[#8B94A3] hover:text-[#F1F3F5] hover:scale-[1.01]'
-                  }`}
-                >
-                  <Camera className="w-3.5 h-3.5" />
-                  <span>E-Gate Kiosk (Biometrics)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isCameraActive) stopCamera();
-                    setAppMode('standard');
-                  }}
-                  className={`relative px-5 py-2.5 rounded-full text-xs font-semibold flex items-center gap-2 transition-all duration-300 ease-out cursor-pointer ${
-                    appMode === 'standard'
-                      ? 'bg-gradient-to-r from-[#FFB454] to-[#FF8A3D] text-[#0A0E14] font-bold shadow-[0_0_18px_rgba(255,180,84,0.35)] scale-[1.02]'
-                      : 'text-[#8B94A3] hover:text-[#F1F3F5] hover:scale-[1.01]'
-                  }`}
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>Document Only</span>
-                </button>
-              </div>
-            </ScrollReveal>
-            
-            {/* Hero Heading with staggered fade + slide-up + blur entrance */}
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, amount: 0.3 }}
-              variants={{
-                hidden: { opacity: 0 },
-                visible: {
-                  opacity: 1,
-                  transition: { staggerChildren: 0.12 }
-                }
-              }}
-              className="text-center max-w-4xl mx-auto space-y-4 px-2"
-            >
-              <motion.h2
+            {/* ================================================================ */}
+            {/* 1. HERO SECTION                                                  */}
+            {/* ================================================================ */}
+            <section className="text-center max-w-5xl mx-auto space-y-8 pt-6 sm:pt-10 pb-12 sm:pb-16 border-b border-white/[0.06]">
+              
+              {/* Badge */}
+              <ScrollReveal direction="down" delay={0.05} distance={15}>
+                <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.08] shadow-[0_4px_20px_rgba(0,0,0,0.5)] backdrop-blur-md">
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FFB454] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FFB454]"></span>
+                  </span>
+                  <span className="text-xs font-mono text-[#FFB454] font-semibold tracking-wider uppercase">
+                    Ministry of Home Affairs • SIH 2026 PS26188
+                  </span>
+                </div>
+              </ScrollReveal>
+
+              {/* Main Headline */}
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, amount: 0.3 }}
                 variants={{
-                  hidden: { opacity: 0, y: 40, filter: 'blur(10px)' },
+                  hidden: { opacity: 0 },
                   visible: {
                     opacity: 1,
-                    y: 0,
-                    filter: 'blur(0px)',
-                    transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] }
+                    transition: { staggerChildren: 0.12 }
                   }
                 }}
-                className="text-3xl sm:text-5xl md:text-6xl lg:text-[72px] font-display font-bold text-[#F1F3F5] tracking-[-0.035em] leading-[1.08]"
+                className="space-y-5 px-2"
               >
-                {appMode === 'egate_kiosk'
-                  ? 'Border Checkpoint & Document Screening Terminal'
-                  : 'Identity Document Analysis & Forensic Screening'}
-              </motion.h2>
-              <motion.p
-                variants={{
-                  hidden: { opacity: 0, y: 24, filter: 'blur(6px)' },
-                  visible: {
-                    opacity: 1,
-                    y: 0,
-                    filter: 'blur(0px)',
-                    transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] }
-                  }
-                }}
-                className="text-sm sm:text-base md:text-lg text-[#8B94A3] max-w-2xl mx-auto leading-relaxed font-sans"
-              >
-                {appMode === 'egate_kiosk'
-                  ? 'Scan passenger identity credentials and verify live webcam biometric facial match in real time.'
-                  : 'Scan and analyze ID credentials (Aadhaar, PAN, Passport) for tampering, OCR extraction, ELA splicing, and checksum verification.'}
-              </motion.p>
-            </motion.div>
+                <motion.h1
+                  variants={{
+                    hidden: { opacity: 0, y: 40, filter: 'blur(10px)' },
+                    visible: {
+                      opacity: 1,
+                      y: 0,
+                      filter: 'blur(0px)',
+                      transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] }
+                    }
+                  }}
+                  className="text-4xl sm:text-6xl md:text-7xl lg:text-[76px] font-display font-black text-[#F1F3F5] tracking-[-0.035em] leading-[1.04]"
+                >
+                  Autonomous Identity & Document Screening Terminal
+                </motion.h1>
+
+                <motion.p
+                  variants={{
+                    hidden: { opacity: 0, y: 24, filter: 'blur(6px)' },
+                    visible: {
+                      opacity: 1,
+                      y: 0,
+                      filter: 'blur(0px)',
+                      transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] }
+                    }
+                  }}
+                  className="text-base sm:text-lg md:text-xl text-[#8B94A3] max-w-3xl mx-auto leading-relaxed font-sans"
+                >
+                  Real-time multimodal forensic verification for national border checkpoints and immigration e-gates. Detects physical and digital document tampering, conducts 1:1 facial biometric matching, and anchors immutable cryptographic audit receipts on-chain.
+                </motion.p>
+              </motion.div>
+
+              {/* Action Buttons & Quick Jump */}
+              <ScrollReveal direction="up" delay={0.25} distance={25}>
+                <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('screening-terminal');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="btn-interactive px-7 py-3.5 rounded-full bg-gradient-to-r from-[#FFB454] to-[#FF8A3D] hover:from-[#FF8A3D] hover:to-[#FF7A20] text-[#0A0E14] font-display font-bold text-sm tracking-wider uppercase flex items-center gap-2.5 shadow-[0_0_28px_rgba(255,180,84,0.35)] cursor-pointer"
+                  >
+                    <Scan className="w-4 h-4 stroke-[2.2]" />
+                    <span>Open Screening Terminal</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsChainModalOpen(true)}
+                    className="px-6 py-3.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] text-[#F1F3F5] hover:text-[#FFB454] border border-white/10 text-xs font-mono font-semibold transition-all flex items-center gap-2 cursor-pointer hover:border-white/20"
+                  >
+                    <Boxes className="w-4 h-4 text-[#FFB454]" />
+                    <span>Explore Blockchain Ledger</span>
+                  </button>
+                </div>
+              </ScrollReveal>
+
+              {/* Key Features Quick Strip */}
+              <ScrollReveal direction="up" delay={0.35} distance={20}>
+                <div className="pt-4 flex flex-wrap items-center justify-center gap-5 sm:gap-6 text-xs font-mono text-[#8B94A3]">
+                  <span className="inline-flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#FFB454]" />
+                    <span>Error Level Analysis (ELA)</span>
+                  </span>
+                  <span className="text-white/20">•</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>1:1 Cosine SFace Biometrics</span>
+                  </span>
+                  <span className="text-white/20">•</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#FFB454]" />
+                    <span>Zero-PII DPDP Act 2023</span>
+                  </span>
+                  <span className="text-white/20">•</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Polygon EVM Hash Chain</span>
+                  </span>
+                </div>
+              </ScrollReveal>
+
+            </section>
+
+            {/* ================================================================ */}
+            {/* 2. SCREENING TERMINAL WORKSPACE                                   */}
+            {/* ================================================================ */}
+            <section id="screening-terminal" className="space-y-10 pt-4 scroll-mt-24">
+              
+              {/* Terminal Section Header */}
+              <ScrollReveal direction="up" delay={0.1}>
+                <div className="text-center max-w-3xl mx-auto space-y-3 px-2">
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px] font-mono text-[#FFB454]">
+                    <Scan className="w-3.5 h-3.5" />
+                    <span className="uppercase tracking-widest font-semibold">LIVE INSPECTION TERMINAL</span>
+                  </div>
+                  <h2 className="text-2xl sm:text-4xl font-display font-bold text-[#F1F3F5] tracking-tight">
+                    {appMode === 'egate_kiosk'
+                      ? 'Border Checkpoint & Biometric E-Gate Station'
+                      : 'Identity Document Analysis & Forensic Screening'}
+                  </h2>
+                  <p className="text-sm text-[#8B94A3] leading-relaxed">
+                    {appMode === 'egate_kiosk'
+                      ? 'Select inspection mode, load travel credentials, and verify live passenger biometric facial match in real time.'
+                      : 'Select inspection mode, upload ID credentials (Aadhaar, PAN, Passport) for tampering, OCR extraction, ELA splicing, and checksum verification.'}
+                  </p>
+                </div>
+              </ScrollReveal>
+
+              {/* Terminal Mode Switcher Bar */}
+              <ScrollReveal direction="up" delay={0.15} distance={20} className="flex flex-col items-center justify-center">
+                <div className="flex items-center p-1.5 rounded-full bg-[#12161F]/90 border border-white/[0.08] shadow-[0_4px_24px_rgba(0,0,0,0.5)] backdrop-blur-md">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isCameraActive) stopCamera();
+                      setAppMode('egate_kiosk');
+                    }}
+                    className={`relative px-5 py-2.5 rounded-full text-xs font-semibold flex items-center gap-2 transition-all duration-300 ease-out cursor-pointer ${
+                      appMode === 'egate_kiosk'
+                        ? 'bg-gradient-to-r from-[#FFB454] to-[#FF8A3D] text-[#0A0E14] font-bold shadow-[0_0_18px_rgba(255,180,84,0.35)] scale-[1.02]'
+                        : 'text-[#8B94A3] hover:text-[#F1F3F5] hover:scale-[1.01]'
+                    }`}
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>E-Gate Kiosk (Biometrics)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isCameraActive) stopCamera();
+                      setAppMode('standard');
+                    }}
+                    className={`relative px-5 py-2.5 rounded-full text-xs font-semibold flex items-center gap-2 transition-all duration-300 ease-out cursor-pointer ${
+                      appMode === 'standard'
+                        ? 'bg-gradient-to-r from-[#FFB454] to-[#FF8A3D] text-[#0A0E14] font-bold shadow-[0_0_18px_rgba(255,180,84,0.35)] scale-[1.02]'
+                        : 'text-[#8B94A3] hover:text-[#F1F3F5] hover:scale-[1.01]'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Document Only</span>
+                  </button>
+                </div>
+              </ScrollReveal>
 
             {/* Split Screen Ingest: Document on Left, Live Face on Right (E-Gate Kiosk) OR Single Column (Document Only) */}
             <ScrollReveal direction="up" delay={0.15} distance={50} scale={0.97} className="will-animate">
@@ -1388,6 +1482,7 @@ export default function DocumentScreeningApp() {
                 })}
               </StaggerContainer>
             </div>
+            </section>
 
             {/* Additional Informational Sections (How It Works, Defense Matrix, Telemetry) */}
             <HomeSections />

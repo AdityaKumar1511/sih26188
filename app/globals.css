@@ -45,11 +45,17 @@ input, textarea {
   display: none !important;
 }
 
-/* Navbar background matching UI background seamlessly */
+/* Navbar and Footer background matching UI background seamlessly (Option 1: Seamless Deep Void) */
 header {
   background-color: #0A0E14 !important;
   background-image: radial-gradient(circle at 50% 0%, #12161F 0%, #0A0E14 100%) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+footer {
+  background-color: #080B10 !important;
+  background-image: linear-gradient(180deg, #0A0E14 0%, #080B10 100%) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
 }
 
 /* Film grain / noise texture overlay — kills the flat generic dark theme look */
