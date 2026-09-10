@@ -72,8 +72,8 @@ body::after {
   z-index: 0;
   pointer-events: none;
   background-image: 
-    linear-gradient(to right, rgba(179, 207, 229, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(179, 207, 229, 0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
   background-size: 60px 60px;
   filter: blur(1.5px);
   mask-image: radial-gradient(ellipse 85% 75% at 50% 35%, black 25%, transparent 85%);
@@ -88,9 +88,9 @@ body::after {
   z-index: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(to right, rgba(74, 127, 167, 0.28) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(74, 127, 167, 0.28) 1px, transparent 1px),
-    radial-gradient(380px circle at var(--mouse-x, -500px) var(--mouse-y, -500px), rgba(74, 127, 167, 0.08), transparent 70%);
+    linear-gradient(to right, rgba(255, 180, 84, 0.15) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 180, 84, 0.15) 1px, transparent 1px),
+    radial-gradient(380px circle at var(--mouse-x, -500px) var(--mouse-y, -500px), rgba(255, 180, 84, 0.08), transparent 70%);
   background-size: 60px 60px, 60px 60px, 100% 100%;
   mask-image: radial-gradient(420px circle at var(--mouse-x, -500px) var(--mouse-y, -500px), black 0%, transparent 100%);
   -webkit-mask-image: radial-gradient(420px circle at var(--mouse-x, -500px) var(--mouse-y, -500px), black 0%, transparent 100%);
@@ -171,12 +171,12 @@ body::after {
   top: 0;
   background: linear-gradient(90deg,
     transparent 0%,
-    rgba(74, 127, 167, 0.15) 15%,
-    rgba(179, 207, 229, 0.7) 50%,
-    rgba(74, 127, 167, 0.15) 85%,
+    rgba(255, 180, 84, 0.15) 15%,
+    rgba(255, 180, 84, 0.8) 50%,
+    rgba(255, 180, 84, 0.15) 85%,
     transparent 100%
   );
-  box-shadow: 0 0 12px 2px rgba(74, 127, 167, 0.2);
+  box-shadow: 0 0 12px 2px rgba(255, 180, 84, 0.25);
   animation: scanline-sweep 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   pointer-events: none;
   z-index: 10;
@@ -185,12 +185,12 @@ body::after {
 .scan-zone:hover::after {
   background: linear-gradient(90deg,
     transparent 0%,
-    rgba(74, 127, 167, 0.3) 15%,
-    rgba(179, 207, 229, 1.0) 50%,
-    rgba(74, 127, 167, 0.3) 85%,
+    rgba(255, 180, 84, 0.3) 15%,
+    rgba(255, 180, 84, 1.0) 50%,
+    rgba(255, 180, 84, 0.3) 85%,
     transparent 100%
   );
-  box-shadow: 0 0 20px 4px rgba(74, 127, 167, 0.3);
+  box-shadow: 0 0 20px 4px rgba(255, 180, 84, 0.4);
 }
 
 /* Status pill scanning line — sweeps across like a live indicator */
@@ -213,7 +213,7 @@ body::after {
   height: 100%;
   background: linear-gradient(90deg,
     transparent,
-    rgba(179, 207, 229, 0.15),
+    rgba(255, 180, 84, 0.15),
     transparent
   );
   animation: pill-scan 3s ease-in-out infinite;
@@ -307,7 +307,7 @@ body::after {
 
 .btn-interactive:hover {
   transform: scale(1.03) translateY(-1px);
-  box-shadow: 0 0 24px rgba(74, 127, 167, 0.2),
+  box-shadow: 0 0 24px rgba(255, 180, 84, 0.2),
               0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
@@ -323,25 +323,35 @@ body::after {
 }
 
 .hover-glow:hover {
-  box-shadow: 0 0 30px rgba(74, 127, 167, 0.12);
+  box-shadow: 0 0 30px rgba(255, 180, 84, 0.15);
   transform: translateY(-1px);
 }
 
 /* ============================================================================
-   CUSTOM SCROLLBAR
+   CUSTOM SCROLLBAR (Cross-Browser: Firefox & WebKit)
    ============================================================================ */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1E2536 #0A0E14;
+}
 
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: #0A0E14;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #1E2536;
-  border-radius: 3px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #FFB454;
+  box-shadow: 0 0 10px rgba(255, 180, 84, 0.4);
 }

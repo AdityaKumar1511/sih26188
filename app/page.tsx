@@ -583,22 +583,26 @@ async function exportPdfAuditReport(screeningResult: ScreeningResult) {
   }
 }
 
-// Animated count-up score component (0 to target over ~800ms)
+// Animated count-up score component (smoothly interpolates to target)
 function AnimatedScore({ value }: { value: number }) {
   const [displayValue, setDisplayValue] = useState(0);
+  const currentValRef = useRef(0);
 
   useEffect(() => {
     let startTimestamp: number | null = null;
-    const duration = 800; // ~800ms
+    const startVal = currentValRef.current;
     const target = Math.round(Number(value)) || 0;
+    if (startVal === target && displayValue === target) return;
+    const duration = 400; // ~400ms smooth transition
 
     let animationFrameId: number;
     const step = (timestamp: number) => {
       if (!startTimestamp) startTimestamp = timestamp;
       const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-      // easeOutCubic
       const ease = 1 - Math.pow(1 - progress, 3);
-      setDisplayValue(Math.round(ease * target));
+      const current = Math.round(startVal + (target - startVal) * ease);
+      currentValRef.current = current;
+      setDisplayValue(current);
       if (progress < 1) {
         animationFrameId = requestAnimationFrame(step);
       }
@@ -1328,7 +1332,7 @@ export default function DocumentScreeningApp() {
                 <button
                   type="button"
                   onClick={handleStartScreening}
-                  className="btn-interactive w-full py-3.5 rounded-xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 text-white font-display font-bold text-sm shadow-xl shadow-orange-600/25 transition flex items-center justify-center gap-2 cursor-pointer border border-orange-400/30"
+                  className="btn-interactive w-full py-3.5 rounded-xl bg-gradient-to-r from-[#FFB454] to-[#FF8A3D] hover:from-[#FF8A3D] hover:to-[#FF7A20] text-[#0A0E14] font-display font-bold text-sm shadow-[0_0_24px_rgba(255,180,84,0.35)] transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer border border-[#FFB454]/40 hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <Scan className="w-4 h-4" />
                   <span>Execute Full Forensic & Biometric Screening</span>
@@ -1338,7 +1342,7 @@ export default function DocumentScreeningApp() {
 
             {/* Instant Demo Presets (With Pre-Configured Biometric Pairs) */}
             <div className="max-w-4xl mx-auto pt-2">
-              <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2 text-center font-hud">
+              <div className="text-xs font-semibold text-[#8B94A3] uppercase tracking-wider mb-3 text-center font-mono">
                 Or choose an instant border screening test case:
               </div>
 
@@ -1349,35 +1353,35 @@ export default function DocumentScreeningApp() {
                     <div
                       key={preset.id}
                       onClick={() => handlePresetSelect(preset)}
-                      className={`matte-card matte-card-hover hover-glow p-3.5 transition cursor-pointer text-left flex flex-col justify-between ${
+                      className={`group rounded-[20px] backdrop-blur-xl p-4 transition-all duration-300 cursor-pointer text-left flex flex-col justify-between border ${
                         isSelected
-                          ? 'border-orange-500 bg-dark-800 ring-1 ring-orange-500 shadow-md shadow-orange-600/10'
-                          : 'hover:border-dark-600 bg-dark-850'
+                          ? 'border-[#FFB454] bg-white/[0.08] ring-1 ring-[#FFB454] shadow-[0_8px_30px_rgba(255,180,84,0.15)]'
+                          : 'border-white/[0.08] bg-white/[0.03] hover:border-white/[0.16] hover:bg-white/[0.06] hover:shadow-[0_8px_24px_rgba(0,0,0,0.4)]'
                       }`}
                     >
                       <div>
-                        <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <span className="text-xs font-bold text-white truncate font-display">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="text-xs font-bold text-[#F1F3F5] truncate font-display">
                             {preset.docType}
                           </span>
                           <span
-                            className={`text-[10px] font-bold font-hud px-2 py-0.5 rounded border ${
+                            className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-full border ${
                               preset.badgeStyle === 'success'
-                                ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800/80'
-                                : 'bg-red-950/80 text-red-400 border-red-800/80'
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                : 'bg-red-500/10 text-red-400 border-red-500/30'
                             }`}
                           >
                             {preset.badgeText}
                           </span>
                         </div>
-                        <p className="text-[11px] text-neutral-400 line-clamp-2 mb-2 leading-relaxed">
+                        <p className="text-[11px] text-[#8B94A3] line-clamp-2 mb-3 leading-relaxed">
                           {preset.description}
                         </p>
                       </div>
 
-                      <div className="pt-2 border-t border-dark-700 flex items-center justify-between text-xs text-orange-500 font-medium">
-                        <span className="font-hud text-[11px]">Load Test Pair</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
+                      <div className="pt-2.5 border-t border-white/[0.08] flex items-center justify-between text-xs text-[#FFB454] font-medium group-hover:text-[#FF8A3D] transition-colors">
+                        <span className="font-mono text-[11px]">Load Test Pair</span>
+                        <ChevronRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
                       </div>
                     </div>
                   );
@@ -1392,8 +1396,8 @@ export default function DocumentScreeningApp() {
         {appState === 'processing' && (
           <div className="my-auto py-10 max-w-lg mx-auto w-full space-y-6 text-center">
             
-            <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto">
-              <div className="relative aspect-[1.3/1] rounded-lg overflow-hidden border border-dark-700 bg-black">
+            <div className="grid grid-cols-2 gap-3.5 max-w-sm mx-auto">
+              <div className="relative aspect-[1.3/1] rounded-xl overflow-hidden border border-white/10 bg-[#0A0E14] shadow-md">
                 {imagePreviewUrl && (
                   /* eslint-disable-next-html-next-image */
                   <img
@@ -1402,17 +1406,17 @@ export default function DocumentScreeningApp() {
                     className="w-full h-full object-cover opacity-60"
                   />
                 )}
-                <div className="absolute top-1.5 left-1.5 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-mono text-orange-400">
+                <div className="absolute top-2 left-2 bg-[#0A0E14]/90 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-mono text-[#FFB454] border border-white/10">
                   DOC SCAN
                 </div>
-                <div className="absolute left-0 right-0 h-0.5 bg-orange-500 animate-scan-laser" />
+                <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#FFB454] to-transparent shadow-[0_0_8px_#FFB454] animate-scan-laser" />
               </div>
 
-              <div className="relative aspect-[1.3/1] rounded-lg overflow-hidden border border-dark-700 bg-black">
+              <div className="relative aspect-[1.3/1] rounded-xl overflow-hidden border border-white/10 bg-[#0A0E14] shadow-md">
                 {appMode === 'standard' ? (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-neutral-500 text-center p-2">
-                    <FileText className="w-6 h-6 text-neutral-600 mb-1" />
-                    <span className="text-[10px] font-mono text-neutral-400">DOC ONLY MODE</span>
+                  <div className="w-full h-full flex flex-col items-center justify-center text-[#8B94A3] text-center p-2">
+                    <FileText className="w-6 h-6 text-[#8B94A3]/60 mb-1" />
+                    <span className="text-[10px] font-mono text-[#8B94A3]">DOC ONLY MODE</span>
                   </div>
                 ) : liveFacePreviewUrl ? (
                   /* eslint-disable-next-html-next-image */
@@ -1422,64 +1426,85 @@ export default function DocumentScreeningApp() {
                     className="w-full h-full object-cover opacity-60"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-neutral-600">
+                  <div className="w-full h-full flex items-center justify-center text-[#8B94A3]/50">
                     <Camera className="w-6 h-6" />
                   </div>
                 )}
-                <div className="absolute top-1.5 left-1.5 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-mono text-emerald-400">
+                <div className="absolute top-2 left-2 bg-[#0A0E14]/90 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-mono text-emerald-400 border border-white/10">
                   {appMode === 'standard' ? 'SKIPPED' : 'LIVE FACE'}
                 </div>
                 {appMode !== 'standard' && (
-                  <div className="absolute left-0 right-0 h-0.5 bg-emerald-500 animate-scan-laser" />
+                  <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#34D399] to-transparent shadow-[0_0_8px_#34D399] animate-scan-laser" />
                 )}
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <div className="flex items-center justify-between text-xs font-mono">
-                <span className="text-orange-400 font-semibold flex items-center gap-2">
-                  <Cpu className="w-4 h-4 animate-spin text-orange-500" />
+                <span className="text-[#FFB454] font-semibold flex items-center gap-2">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                    className="flex items-center justify-center text-[#FFB454]"
+                  >
+                    <Cpu className="w-4 h-4 text-[#FFB454] drop-shadow-[0_0_8px_rgba(255,180,84,0.6)]" />
+                  </motion.div>
                   {appMode === 'standard' ? 'RUNNING FORENSIC ELA & OCR ANALYSIS...' : 'RUNNING S-FACE EMBEDDINGS & ELA PIPELINE...'}
                 </span>
-                <span className="text-white font-bold">{processingProgress}%</span>
+                <span className="text-[#F1F3F5] font-bold font-mono tracking-wider">
+                  <AnimatedScore value={processingProgress} />%
+                </span>
               </div>
 
-              <div className="w-full h-2 bg-black rounded-full overflow-hidden border border-dark-700">
-                <div
-                  className="h-full bg-orange-600 transition-all duration-300 rounded-full"
+              <div className="w-full h-2.5 bg-[#0A0E14] rounded-full overflow-hidden border border-white/[0.08] p-0.5 shadow-inner">
+                <motion.div
+                  className="h-full bg-gradient-to-r from-[#FF8A3D] via-[#FFB454] to-[#FFE29F] rounded-full shadow-[0_0_12px_rgba(255,180,84,0.5)] transition-all duration-300"
                   style={{ width: `${processingProgress}%` }}
                 />
               </div>
             </div>
 
             {/* Live Progress Logs */}
-            <div className="bg-black border border-dark-700 rounded-xl p-4 text-left font-mono text-xs space-y-2">
-              <div className="text-[10px] text-neutral-500 uppercase tracking-wider border-b border-dark-700 pb-1 mb-2">
-                Execution Pipeline:
+            <div className="bg-[#0A0E14]/90 backdrop-blur-md border border-white/[0.08] rounded-[20px] p-5 text-left font-mono text-xs space-y-2 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
+              <div className="text-[10px] text-[#8B94A3] uppercase tracking-wider border-b border-white/[0.08] pb-1.5 mb-2.5 flex items-center justify-between">
+                <span>Execution Pipeline</span>
+                <span className="text-[10px] text-[#FFB454] font-semibold">STAGE {Math.min(currentStepIndex + 1, processingSteps.length)} / {processingSteps.length}</span>
               </div>
               {processingSteps.map((step, idx) => {
                 const isCompleted = idx < currentStepIndex;
                 const isCurrent = idx === currentStepIndex;
                 return (
-                  <div
+                  <motion.div
                     key={idx}
-                    className={`flex items-center gap-2 ${
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{
+                      opacity: idx <= currentStepIndex ? 1 : 0.35,
+                      x: 0,
+                    }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                    className={`flex items-center gap-2.5 py-1 px-1.5 rounded-lg transition-colors ${
                       isCompleted
                         ? 'text-emerald-400'
                         : isCurrent
-                        ? 'text-orange-400 font-semibold'
-                        : 'text-neutral-600'
+                        ? 'text-[#FFB454] font-semibold bg-white/[0.03]'
+                        : 'text-[#8B94A3]/50'
                     }`}
                   >
                     {isCompleted ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                      <motion.div
+                        initial={{ scale: 0.5 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+                      >
+                        <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                      </motion.div>
                     ) : isCurrent ? (
-                      <span className="w-3 h-3 rounded-full border-2 border-orange-500 border-t-transparent animate-spin flex-shrink-0" />
+                      <span className="w-3 h-3 rounded-full border-2 border-[#FFB454] border-t-transparent animate-spin flex-shrink-0" />
                     ) : (
-                      <span className="w-3 h-3 rounded-full border border-dark-700 flex-shrink-0" />
+                      <span className="w-3 h-3 rounded-full border border-white/20 flex-shrink-0" />
                     )}
                     <span className="truncate">{step}</span>
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
@@ -2164,6 +2189,58 @@ export default function DocumentScreeningApp() {
         )}
 
       </main>
+
+      {/* ==================================================================== */}
+      {/* GLOBAL FOOTER                                                        */}
+      {/* ==================================================================== */}
+      <footer className="w-full border-t border-white/[0.08] bg-[#0A0E14]/80 backdrop-blur-xl mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            
+            {/* Left: Brand & Terminal Info */}
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-white/[0.04] border border-[#FFB454]/30 flex items-center justify-center text-[#FFB454] shadow-[0_0_12px_rgba(255,180,84,0.15)]">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-display font-bold text-xs tracking-wider text-[#F1F3F5] uppercase">
+                    SENTINEL PROTOCOL
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/[0.04] text-[#FFB454] border border-[#FFB454]/20">
+                    v2.6.4-prod
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#8B94A3] mt-0.5 font-sans">
+                  AI-Powered Multimodal Document & Identity Screening Terminal | Bureau of Immigration & Border Security
+                </p>
+              </div>
+            </div>
+
+            {/* Right: Technical Indicators & Quick Actions */}
+            <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-[#8B94A3]">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#34D399]" />
+                <span className="text-[#8B94A3]">Amoy Testnet Active</span>
+              </span>
+              <span className="text-white/20">•</span>
+              <span className="inline-flex items-center gap-1.5">
+                <Lock className="w-3 h-3 text-[#FFB454]" />
+                <span className="text-[#8B94A3]">DPDP Act 2023 Compliant</span>
+              </span>
+              <span className="text-white/20">•</span>
+              <button
+                type="button"
+                onClick={() => setIsChainModalOpen(true)}
+                className="text-[#8B94A3] hover:text-[#FFB454] transition-colors underline-offset-4 hover:underline cursor-pointer"
+              >
+                Blockchain Ledger
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </footer>
 
       {/* BLOCKCHAIN AUDIT MODAL EXPLORER */}
       {isChainModalOpen && (
