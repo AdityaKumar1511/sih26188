@@ -2,6 +2,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { ScrollReveal, StaggerContainer, StaggerItem } from './components/ScrollReveal';
+import Navbar from './components/Navbar';
+import Footer from './components/Footer';
+import HomeSections from './components/HomeSections';
 import {
   ShieldCheck,
   ShieldAlert,
@@ -957,69 +961,18 @@ export default function DocumentScreeningApp() {
       <canvas ref={canvasRef} className="hidden" />
 
       {/* ==================================================================== */}
-      {/* NAVBAR (brand wordmark + system status + mode toggle)                */}
+      {/* MASTER NAVBAR (matching reference design style)                      */}
       {/* ==================================================================== */}
-      <header className="border-b border-white/[0.08] bg-[#0A0E14]/85 backdrop-blur-xl sticky top-0 z-50 transition-all">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          
-          {/* Left: Sentinel Wordmark */}
-          <div className="flex items-center gap-3.5 cursor-default py-1">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FFB454] to-[#FF8A3D] flex items-center justify-center text-[#0A0E14] shadow-[0_0_20px_rgba(255,180,84,0.25)] ring-1 ring-white/20">
-              <Scan className="w-5 h-5 stroke-[2.2]" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-display font-bold text-[#F1F3F5] tracking-tight uppercase leading-none">
-                  Sentinel
-                </h1>
-                <span className="text-[10px] font-mono font-medium text-[#FFB454] bg-[#FFB454]/10 border border-[#FFB454]/25 px-2 py-0.5 rounded-full shadow-[0_0_10px_rgba(255,180,84,0.1)]">
-                  PS26188
-                </span>
-              </div>
-              <p className="text-xs font-mono text-[#8B94A3] tracking-normal mt-1">
-                AI Document & Identity Screening
-              </p>
-            </div>
-          </div>
-
-          {/* Right Controls: Mode Toggle */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center p-1 rounded-full bg-[#12161F]/90 border border-white/[0.08] shadow-inner backdrop-blur-md">
-              <button
-                type="button"
-                onClick={() => {
-                  if (isCameraActive) stopCamera();
-                  setAppMode('egate_kiosk');
-                }}
-                className={`relative px-4 py-2 rounded-full text-xs font-medium flex items-center gap-2 transition-all duration-300 ease-out cursor-pointer ${
-                  appMode === 'egate_kiosk'
-                    ? 'bg-gradient-to-r from-[#FFB454] to-[#FF8A3D] text-[#0A0E14] font-semibold shadow-[0_0_16px_rgba(255,180,84,0.35)] scale-[1.03]'
-                    : 'text-[#8B94A3] hover:text-[#F1F3F5] hover:scale-[1.01]'
-                }`}
-              >
-                <Camera className="w-3.5 h-3.5" />
-                <span>E-Gate Kiosk</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (isCameraActive) stopCamera();
-                  setAppMode('standard');
-                }}
-                className={`relative px-4 py-2 rounded-full text-xs font-medium flex items-center gap-2 transition-all duration-300 ease-out cursor-pointer ${
-                  appMode === 'standard'
-                    ? 'bg-gradient-to-r from-[#FFB454] to-[#FF8A3D] text-[#0A0E14] font-semibold shadow-[0_0_16px_rgba(255,180,84,0.35)] scale-[1.03]'
-                    : 'text-[#8B94A3] hover:text-[#F1F3F5] hover:scale-[1.01]'
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Document Only</span>
-              </button>
-            </div>
-          </div>
-
-        </div>
-      </header>
+      <Navbar
+        appState={appState}
+        onNewScan={handleReset}
+        onOpenLedger={() => setIsChainModalOpen(true)}
+        onNavigateTab={(tab) => {
+          setActiveTab(tab as any);
+          window.scrollTo({ top: 500, behavior: 'smooth' });
+        }}
+        hasResult={!!screeningResult}
+      />
 
       {/* ==================================================================== */}
       {/* MAIN BODY                                                            */}
@@ -1028,28 +981,66 @@ export default function DocumentScreeningApp() {
         
         {/* STATE 1: UPLOAD & BIOMETRIC CAPTURE SCREEN */}
         {appState === 'upload' && (
-          <div className="space-y-10 my-auto py-12 sm:py-20 lg:py-28">
+          <div className="space-y-10 my-auto py-10 sm:py-16 lg:py-20">
             
-            {/* Hero Heading with staggered fade + slide-up entrance */}
+            {/* Top of Home Page: Screening Mode Switcher (Moved out of Navbar) */}
+            <ScrollReveal direction="down" delay={0.05} distance={20} className="flex flex-col items-center justify-center">
+              <div className="flex items-center p-1.5 rounded-full bg-[#12161F]/90 border border-white/[0.08] shadow-[0_4px_24px_rgba(0,0,0,0.5)] backdrop-blur-md">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isCameraActive) stopCamera();
+                    setAppMode('egate_kiosk');
+                  }}
+                  className={`relative px-5 py-2.5 rounded-full text-xs font-semibold flex items-center gap-2 transition-all duration-300 ease-out cursor-pointer ${
+                    appMode === 'egate_kiosk'
+                      ? 'bg-gradient-to-r from-[#FFB454] to-[#FF8A3D] text-[#0A0E14] font-bold shadow-[0_0_18px_rgba(255,180,84,0.35)] scale-[1.02]'
+                      : 'text-[#8B94A3] hover:text-[#F1F3F5] hover:scale-[1.01]'
+                  }`}
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>E-Gate Kiosk (Biometrics)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isCameraActive) stopCamera();
+                    setAppMode('standard');
+                  }}
+                  className={`relative px-5 py-2.5 rounded-full text-xs font-semibold flex items-center gap-2 transition-all duration-300 ease-out cursor-pointer ${
+                    appMode === 'standard'
+                      ? 'bg-gradient-to-r from-[#FFB454] to-[#FF8A3D] text-[#0A0E14] font-bold shadow-[0_0_18px_rgba(255,180,84,0.35)] scale-[1.02]'
+                      : 'text-[#8B94A3] hover:text-[#F1F3F5] hover:scale-[1.01]'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Document Only</span>
+                </button>
+              </div>
+            </ScrollReveal>
+            
+            {/* Hero Heading with staggered fade + slide-up + blur entrance */}
             <motion.div
               initial="hidden"
-              animate="visible"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.3 }}
               variants={{
                 hidden: { opacity: 0 },
                 visible: {
                   opacity: 1,
-                  transition: { staggerChildren: 0.1 }
+                  transition: { staggerChildren: 0.12 }
                 }
               }}
               className="text-center max-w-4xl mx-auto space-y-4 px-2"
             >
               <motion.h2
                 variants={{
-                  hidden: { opacity: 0, y: 28 },
+                  hidden: { opacity: 0, y: 40, filter: 'blur(10px)' },
                   visible: {
                     opacity: 1,
                     y: 0,
-                    transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] }
+                    filter: 'blur(0px)',
+                    transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] }
                   }
                 }}
                 className="text-3xl sm:text-5xl md:text-6xl lg:text-[72px] font-display font-bold text-[#F1F3F5] tracking-[-0.035em] leading-[1.08]"
@@ -1060,11 +1051,12 @@ export default function DocumentScreeningApp() {
               </motion.h2>
               <motion.p
                 variants={{
-                  hidden: { opacity: 0, y: 18 },
+                  hidden: { opacity: 0, y: 24, filter: 'blur(6px)' },
                   visible: {
                     opacity: 1,
                     y: 0,
-                    transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] }
+                    filter: 'blur(0px)',
+                    transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] }
                   }
                 }}
                 className="text-sm sm:text-base md:text-lg text-[#8B94A3] max-w-2xl mx-auto leading-relaxed font-sans"
@@ -1076,6 +1068,7 @@ export default function DocumentScreeningApp() {
             </motion.div>
 
             {/* Split Screen Ingest: Document on Left, Live Face on Right (E-Gate Kiosk) OR Single Column (Document Only) */}
+            <ScrollReveal direction="up" delay={0.15} distance={50} scale={0.97} className="will-animate">
             <div className={
               appMode === 'egate_kiosk'
                 ? "grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto"
@@ -1325,9 +1318,11 @@ export default function DocumentScreeningApp() {
               )}
 
             </div>
+            </ScrollReveal>
 
             {/* Launch Screening Button */}
             {(imagePreviewUrl || selectedPreset) && (
+              <ScrollReveal direction="up" delay={0.25} distance={30}>
               <div className="max-w-md mx-auto text-center pt-2">
                 <button
                   type="button"
@@ -1338,18 +1333,22 @@ export default function DocumentScreeningApp() {
                   <span>Execute Full Forensic & Biometric Screening</span>
                 </button>
               </div>
+              </ScrollReveal>
             )}
 
             {/* Instant Demo Presets (With Pre-Configured Biometric Pairs) */}
             <div className="max-w-4xl mx-auto pt-2">
+              <ScrollReveal direction="up" delay={0.1} distance={20}>
               <div className="text-xs font-semibold text-[#8B94A3] uppercase tracking-wider mb-3 text-center font-mono">
                 Or choose an instant border screening test case:
               </div>
+              </ScrollReveal>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <StaggerContainer stagger={0.1} delay={0.15} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {SAMPLE_PRESETS.map((preset) => {
                   const isSelected = selectedPreset?.id === preset.id;
                   return (
+                    <StaggerItem key={preset.id} direction="up" distance={25} scale={0.96}>
                     <div
                       key={preset.id}
                       onClick={() => handlePresetSelect(preset)}
@@ -1384,10 +1383,14 @@ export default function DocumentScreeningApp() {
                         <ChevronRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
                       </div>
                     </div>
+                    </StaggerItem>
                   );
                 })}
-              </div>
+              </StaggerContainer>
             </div>
+
+            {/* Additional Informational Sections (How It Works, Defense Matrix, Telemetry) */}
+            <HomeSections />
 
           </div>
         )}
@@ -1396,118 +1399,124 @@ export default function DocumentScreeningApp() {
         {appState === 'processing' && (
           <div className="my-auto py-10 max-w-lg mx-auto w-full space-y-6 text-center">
             
-            <div className="grid grid-cols-2 gap-3.5 max-w-sm mx-auto">
-              <div className="relative aspect-[1.3/1] rounded-xl overflow-hidden border border-white/10 bg-[#0A0E14] shadow-md">
-                {imagePreviewUrl && (
-                  /* eslint-disable-next-html-next-image */
-                  <img
-                    src={imagePreviewUrl}
-                    alt="Document Ingest"
-                    className="w-full h-full object-cover opacity-60"
-                  />
-                )}
-                <div className="absolute top-2 left-2 bg-[#0A0E14]/90 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-mono text-[#FFB454] border border-white/10">
-                  DOC SCAN
-                </div>
-                <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#FFB454] to-transparent shadow-[0_0_8px_#FFB454] animate-scan-laser" />
-              </div>
-
-              <div className="relative aspect-[1.3/1] rounded-xl overflow-hidden border border-white/10 bg-[#0A0E14] shadow-md">
-                {appMode === 'standard' ? (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-[#8B94A3] text-center p-2">
-                    <FileText className="w-6 h-6 text-[#8B94A3]/60 mb-1" />
-                    <span className="text-[10px] font-mono text-[#8B94A3]">DOC ONLY MODE</span>
+            <ScrollReveal direction="up" delay={0} distance={35} scale={0.97}>
+              <div className="grid grid-cols-2 gap-3.5 max-w-sm mx-auto">
+                <div className="relative aspect-[1.3/1] rounded-xl overflow-hidden border border-white/10 bg-[#0A0E14] shadow-md">
+                  {imagePreviewUrl && (
+                    /* eslint-disable-next-html-next-image */
+                    <img
+                      src={imagePreviewUrl}
+                      alt="Document Ingest"
+                      className="w-full h-full object-cover opacity-60"
+                    />
+                  )}
+                  <div className="absolute top-2 left-2 bg-[#0A0E14]/90 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-mono text-[#FFB454] border border-white/10">
+                    DOC SCAN
                   </div>
-                ) : liveFacePreviewUrl ? (
-                  /* eslint-disable-next-html-next-image */
-                  <img
-                    src={liveFacePreviewUrl}
-                    alt="Live Face"
-                    className="w-full h-full object-cover opacity-60"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-[#8B94A3]/50">
-                    <Camera className="w-6 h-6" />
-                  </div>
-                )}
-                <div className="absolute top-2 left-2 bg-[#0A0E14]/90 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-mono text-emerald-400 border border-white/10">
-                  {appMode === 'standard' ? 'SKIPPED' : 'LIVE FACE'}
+                  <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#FFB454] to-transparent shadow-[0_0_8px_#FFB454] animate-scan-laser" />
                 </div>
-                {appMode !== 'standard' && (
-                  <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#34D399] to-transparent shadow-[0_0_8px_#34D399] animate-scan-laser" />
-                )}
-              </div>
-            </div>
 
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="text-[#FFB454] font-semibold flex items-center gap-2">
+                <div className="relative aspect-[1.3/1] rounded-xl overflow-hidden border border-white/10 bg-[#0A0E14] shadow-md">
+                  {appMode === 'standard' ? (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-[#8B94A3] text-center p-2">
+                      <FileText className="w-6 h-6 text-[#8B94A3]/60 mb-1" />
+                      <span className="text-[10px] font-mono text-[#8B94A3]">DOC ONLY MODE</span>
+                    </div>
+                  ) : liveFacePreviewUrl ? (
+                    /* eslint-disable-next-html-next-image */
+                    <img
+                      src={liveFacePreviewUrl}
+                      alt="Live Face"
+                      className="w-full h-full object-cover opacity-60"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-[#8B94A3]/50">
+                      <Camera className="w-6 h-6" />
+                    </div>
+                  )}
+                  <div className="absolute top-2 left-2 bg-[#0A0E14]/90 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] font-mono text-emerald-400 border border-white/10">
+                    {appMode === 'standard' ? 'SKIPPED' : 'LIVE FACE'}
+                  </div>
+                  {appMode !== 'standard' && (
+                    <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#34D399] to-transparent shadow-[0_0_8px_#34D399] animate-scan-laser" />
+                  )}
+                </div>
+              </div>
+            </ScrollReveal>
+
+            <ScrollReveal direction="up" delay={0.2} distance={30}>
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <span className="text-[#FFB454] font-semibold flex items-center gap-2">
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                      className="flex items-center justify-center text-[#FFB454]"
+                    >
+                      <Cpu className="w-4 h-4 text-[#FFB454] drop-shadow-[0_0_8px_rgba(255,180,84,0.6)]" />
+                    </motion.div>
+                    {appMode === 'standard' ? 'RUNNING FORENSIC ELA & OCR ANALYSIS...' : 'RUNNING S-FACE EMBEDDINGS & ELA PIPELINE...'}
+                  </span>
+                  <span className="text-[#F1F3F5] font-bold font-mono tracking-wider">
+                    <AnimatedScore value={processingProgress} />%
+                  </span>
+                </div>
+
+                <div className="w-full h-2.5 bg-[#0A0E14] rounded-full overflow-hidden border border-white/[0.08] p-0.5 shadow-inner">
                   <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                    className="flex items-center justify-center text-[#FFB454]"
-                  >
-                    <Cpu className="w-4 h-4 text-[#FFB454] drop-shadow-[0_0_8px_rgba(255,180,84,0.6)]" />
-                  </motion.div>
-                  {appMode === 'standard' ? 'RUNNING FORENSIC ELA & OCR ANALYSIS...' : 'RUNNING S-FACE EMBEDDINGS & ELA PIPELINE...'}
-                </span>
-                <span className="text-[#F1F3F5] font-bold font-mono tracking-wider">
-                  <AnimatedScore value={processingProgress} />%
-                </span>
+                    className="h-full bg-gradient-to-r from-[#FF8A3D] via-[#FFB454] to-[#FFE29F] rounded-full shadow-[0_0_12px_rgba(255,180,84,0.5)] transition-all duration-300"
+                    style={{ width: `${processingProgress}%` }}
+                  />
+                </div>
               </div>
-
-              <div className="w-full h-2.5 bg-[#0A0E14] rounded-full overflow-hidden border border-white/[0.08] p-0.5 shadow-inner">
-                <motion.div
-                  className="h-full bg-gradient-to-r from-[#FF8A3D] via-[#FFB454] to-[#FFE29F] rounded-full shadow-[0_0_12px_rgba(255,180,84,0.5)] transition-all duration-300"
-                  style={{ width: `${processingProgress}%` }}
-                />
-              </div>
-            </div>
+            </ScrollReveal>
 
             {/* Live Progress Logs */}
-            <div className="bg-[#0A0E14]/90 backdrop-blur-md border border-white/[0.08] rounded-[20px] p-5 text-left font-mono text-xs space-y-2 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
-              <div className="text-[10px] text-[#8B94A3] uppercase tracking-wider border-b border-white/[0.08] pb-1.5 mb-2.5 flex items-center justify-between">
-                <span>Execution Pipeline</span>
-                <span className="text-[10px] text-[#FFB454] font-semibold">STAGE {Math.min(currentStepIndex + 1, processingSteps.length)} / {processingSteps.length}</span>
+            <ScrollReveal direction="up" delay={0.3} distance={35}>
+              <div className="bg-[#0A0E14]/90 backdrop-blur-md border border-white/[0.08] rounded-[20px] p-5 text-left font-mono text-xs space-y-2 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
+                <div className="text-[10px] text-[#8B94A3] uppercase tracking-wider border-b border-white/[0.08] pb-1.5 mb-2.5 flex items-center justify-between">
+                  <span>Execution Pipeline</span>
+                  <span className="text-[10px] text-[#FFB454] font-semibold">STAGE {Math.min(currentStepIndex + 1, processingSteps.length)} / {processingSteps.length}</span>
+                </div>
+                {processingSteps.map((step, idx) => {
+                  const isCompleted = idx < currentStepIndex;
+                  const isCurrent = idx === currentStepIndex;
+                  return (
+                    <motion.div
+                      key={idx}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{
+                        opacity: idx <= currentStepIndex ? 1 : 0.35,
+                        x: 0,
+                      }}
+                      transition={{ duration: 0.3, ease: 'easeOut' }}
+                      className={`flex items-center gap-2.5 py-1 px-1.5 rounded-lg transition-colors ${
+                        isCompleted
+                          ? 'text-emerald-400'
+                          : isCurrent
+                          ? 'text-[#FFB454] font-semibold bg-white/[0.03]'
+                          : 'text-[#8B94A3]/50'
+                      }`}
+                    >
+                      {isCompleted ? (
+                        <motion.div
+                          initial={{ scale: 0.5 }}
+                          animate={{ scale: 1 }}
+                          transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+                        >
+                          <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                        </motion.div>
+                      ) : isCurrent ? (
+                        <span className="w-3 h-3 rounded-full border-2 border-[#FFB454] border-t-transparent animate-spin flex-shrink-0" />
+                      ) : (
+                        <span className="w-3 h-3 rounded-full border border-white/20 flex-shrink-0" />
+                      )}
+                      <span className="truncate">{step}</span>
+                    </motion.div>
+                  );
+                })}
               </div>
-              {processingSteps.map((step, idx) => {
-                const isCompleted = idx < currentStepIndex;
-                const isCurrent = idx === currentStepIndex;
-                return (
-                  <motion.div
-                    key={idx}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{
-                      opacity: idx <= currentStepIndex ? 1 : 0.35,
-                      x: 0,
-                    }}
-                    transition={{ duration: 0.3, ease: 'easeOut' }}
-                    className={`flex items-center gap-2.5 py-1 px-1.5 rounded-lg transition-colors ${
-                      isCompleted
-                        ? 'text-emerald-400'
-                        : isCurrent
-                        ? 'text-[#FFB454] font-semibold bg-white/[0.03]'
-                        : 'text-[#8B94A3]/50'
-                    }`}
-                  >
-                    {isCompleted ? (
-                      <motion.div
-                        initial={{ scale: 0.5 }}
-                        animate={{ scale: 1 }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 15 }}
-                      >
-                        <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                      </motion.div>
-                    ) : isCurrent ? (
-                      <span className="w-3 h-3 rounded-full border-2 border-[#FFB454] border-t-transparent animate-spin flex-shrink-0" />
-                    ) : (
-                      <span className="w-3 h-3 rounded-full border border-white/20 flex-shrink-0" />
-                    )}
-                    <span className="truncate">{step}</span>
-                  </motion.div>
-                );
-              })}
-            </div>
+            </ScrollReveal>
 
           </div>
         )}
@@ -1517,6 +1526,7 @@ export default function DocumentScreeningApp() {
           <div className="space-y-6">
             
             {/* Top Score Banner */}
+            <ScrollReveal direction="up" duration={0.6}>
             <div className="rounded-[20px] bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
               
               <div className="flex items-center gap-5 w-full md:w-auto">
@@ -1599,8 +1609,10 @@ export default function DocumentScreeningApp() {
               </div>
 
             </div>
+            </ScrollReveal>
 
             {/* Officer Quick Decision Panel */}
+            <ScrollReveal direction="up" delay={0.15}>
             <div className="rounded-[20px] bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] p-4 flex flex-col sm:flex-row items-center justify-between gap-3.5 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
               <div className="flex items-center gap-2.5">
                 <ShieldAlert className="w-4 h-4 text-[#FFB454]" />
@@ -1647,6 +1659,7 @@ export default function DocumentScreeningApp() {
                 </button>
               </div>
             </div>
+            </ScrollReveal>
 
             {/* Inspector Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -1655,6 +1668,7 @@ export default function DocumentScreeningApp() {
               <div className="lg:col-span-7 space-y-5">
                 
                 {/* 1:1 Biometric Comparison Card */}
+                <ScrollReveal direction="left" delay={0.1}>
                 {screeningResult.biometricResult ? (
                   <div className="rounded-[20px] bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] p-5 space-y-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
                     <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
@@ -1772,8 +1786,10 @@ export default function DocumentScreeningApp() {
                     </span>
                   </div>
                 )}
+                </ScrollReveal>
 
                 {/* Document Canvas Inspector */}
+                <ScrollReveal direction="left" delay={0.2}>
                 <div className="rounded-[20px] bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] p-5 space-y-3.5 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
                   <div className="flex items-center justify-between text-xs border-b border-white/[0.08] pb-3">
                     <div className="flex items-center gap-2 font-display font-bold text-[#F1F3F5]">
@@ -1837,11 +1853,14 @@ export default function DocumentScreeningApp() {
                     )}
                   </div>
                 </div>
+                </ScrollReveal>
 
               </div>
 
               {/* Right Column: Multi-Tab Forensic Matrix */}
-              <div className="lg:col-span-5 rounded-[20px] bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] p-5 space-y-4 flex flex-col shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
+              <div className="lg:col-span-5">
+              <ScrollReveal direction="right" delay={0.15}>
+              <div className="rounded-[20px] bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] p-5 space-y-4 flex flex-col shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
                 
                 {/* Tabs with Animated Sliding Underline */}
                 <div className="relative flex border-b border-white/[0.08] text-xs font-semibold overflow-x-auto gap-1 pb-1">
@@ -1936,40 +1955,43 @@ export default function DocumentScreeningApp() {
                     transition={{ duration: 0.18, ease: 'easeOut' }}
                     className="space-y-2.5 flex-1 overflow-y-auto max-h-[460px] pr-1"
                   >
-                    {screeningResult.extractedFields.map((field, idx) => {
-                      const isAnomaly = field.status !== 'verified' || !!field.anomalyDetails;
-                      return (
-                        <div
-                          key={idx}
-                          className={`rounded-xl p-3.5 text-xs space-y-1.5 border transition-colors ${
-                            isAnomaly
-                              ? 'bg-red-500/[0.04] border-white/[0.08] border-l-4 border-l-red-500'
-                              : 'bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.05]'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-[#8B94A3] font-medium font-sans">{field.fieldName}</span>
-                            <span
-                              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
-                                field.status === 'verified'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                  : 'bg-red-500/10 text-red-400 border-red-500/20'
+                    <StaggerContainer stagger={0.04} delay={0.05}>
+                      {screeningResult.extractedFields.map((field, idx) => {
+                        const isAnomaly = field.status !== 'verified' || !!field.anomalyDetails;
+                        return (
+                          <StaggerItem key={idx} direction="up" distance={15} duration={0.3} className="mb-2.5">
+                            <div
+                              className={`rounded-xl p-3.5 text-xs space-y-1.5 border transition-colors ${
+                                isAnomaly
+                                  ? 'bg-red-500/[0.04] border-white/[0.08] border-l-4 border-l-red-500'
+                                  : 'bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.05]'
                               }`}
                             >
-                              {field.status.toUpperCase()} ({field.confidence}%)
-                            </span>
-                          </div>
-                          <div className="font-mono text-[#F1F3F5] font-semibold text-sm">
-                            {field.value}
-                          </div>
-                          {field.anomalyDetails && (
-                            <div className="text-[11px] text-red-300 font-mono bg-red-500/10 p-2 rounded-lg border border-red-500/25 mt-1.5">
-                              ⚠ {field.anomalyDetails}
+                              <div className="flex items-center justify-between">
+                                <span className="text-[#8B94A3] font-medium font-sans">{field.fieldName}</span>
+                                <span
+                                  className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+                                    field.status === 'verified'
+                                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                      : 'bg-red-500/10 text-red-400 border-red-500/20'
+                                  }`}
+                                >
+                                  {field.status.toUpperCase()} ({field.confidence}%)
+                                </span>
+                              </div>
+                              <div className="font-mono text-[#F1F3F5] font-semibold text-sm">
+                                {field.value}
+                              </div>
+                              {field.anomalyDetails && (
+                                <div className="text-[11px] text-red-300 font-mono bg-red-500/10 p-2 rounded-lg border border-red-500/25 mt-1.5">
+                                  ⚠ {field.anomalyDetails}
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                          </StaggerItem>
+                        );
+                      })}
+                    </StaggerContainer>
                   </motion.div>
                 )}
 
@@ -1982,46 +2004,49 @@ export default function DocumentScreeningApp() {
                     transition={{ duration: 0.18, ease: 'easeOut' }}
                     className="space-y-2.5 flex-1 overflow-y-auto max-h-[460px] pr-1"
                   >
-                    {screeningResult.validationChecks.map((check) => {
-                      const isPass = check.status === 'pass';
-                      return (
-                        <div
-                          key={check.id}
-                          className={`p-3.5 rounded-xl border transition-colors text-xs space-y-1.5 ${
-                            !isPass
-                              ? 'bg-red-500/[0.04] border-white/[0.08] border-l-4 border-l-red-500'
-                              : 'bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.05]'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {isPass ? (
-                                <div className="w-5 h-5 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center flex-shrink-0">
-                                  <Check className="w-3 h-3 text-emerald-400" />
-                                </div>
-                              ) : (
-                                <div className="w-5 h-5 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center flex-shrink-0">
-                                  <X className="w-3 h-3 text-red-400" />
-                                </div>
-                              )}
-                              <span className="font-bold text-[#F1F3F5] font-display">{check.name}</span>
-                            </div>
-                            <span
-                              className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${
-                                isPass
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                  : 'bg-red-500/10 text-red-400 border-red-500/20'
+                    <StaggerContainer stagger={0.04} delay={0.05}>
+                      {screeningResult.validationChecks.map((check) => {
+                        const isPass = check.status === 'pass';
+                        return (
+                          <StaggerItem key={check.id} direction="up" distance={15} duration={0.3} className="mb-2.5">
+                            <div
+                              className={`p-3.5 rounded-xl border transition-colors text-xs space-y-1.5 ${
+                                !isPass
+                                  ? 'bg-red-500/[0.04] border-white/[0.08] border-l-4 border-l-red-500'
+                                  : 'bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.05]'
                               }`}
                             >
-                              {check.score}/100
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-[#8B94A3] pl-7 leading-relaxed">
-                            {check.details}
-                          </p>
-                        </div>
-                      );
-                    })}
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  {isPass ? (
+                                    <div className="w-5 h-5 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center flex-shrink-0">
+                                      <Check className="w-3 h-3 text-emerald-400" />
+                                    </div>
+                                  ) : (
+                                    <div className="w-5 h-5 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center flex-shrink-0">
+                                      <X className="w-3 h-3 text-red-400" />
+                                    </div>
+                                  )}
+                                  <span className="font-bold text-[#F1F3F5] font-display">{check.name}</span>
+                                </div>
+                                <span
+                                  className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${
+                                    isPass
+                                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                      : 'bg-red-500/10 text-red-400 border-red-500/20'
+                                  }`}
+                                >
+                                  {check.score}/100
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-[#8B94A3] pl-7 leading-relaxed">
+                                {check.details}
+                              </p>
+                            </div>
+                          </StaggerItem>
+                        );
+                      })}
+                    </StaggerContainer>
                   </motion.div>
                 )}
 
@@ -2182,6 +2207,8 @@ export default function DocumentScreeningApp() {
                 )}
 
               </div>
+              </ScrollReveal>
+              </div>
 
             </div>
 
@@ -2191,56 +2218,12 @@ export default function DocumentScreeningApp() {
       </main>
 
       {/* ==================================================================== */}
-      {/* GLOBAL FOOTER                                                        */}
+      {/* MASTER GLOBAL FOOTER                                                 */}
       {/* ==================================================================== */}
-      <footer className="w-full border-t border-white/[0.08] bg-[#0A0E14]/80 backdrop-blur-xl mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            
-            {/* Left: Brand & Terminal Info */}
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-white/[0.04] border border-[#FFB454]/30 flex items-center justify-center text-[#FFB454] shadow-[0_0_12px_rgba(255,180,84,0.15)]">
-                <ShieldCheck className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-display font-bold text-xs tracking-wider text-[#F1F3F5] uppercase">
-                    SENTINEL PROTOCOL
-                  </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/[0.04] text-[#FFB454] border border-[#FFB454]/20">
-                    v2.6.4-prod
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#8B94A3] mt-0.5 font-sans">
-                  AI-Powered Multimodal Document & Identity Screening Terminal | Bureau of Immigration & Border Security
-                </p>
-              </div>
-            </div>
-
-            {/* Right: Technical Indicators & Quick Actions */}
-            <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-[#8B94A3]">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#34D399]" />
-                <span className="text-[#8B94A3]">Amoy Testnet Active</span>
-              </span>
-              <span className="text-white/20">•</span>
-              <span className="inline-flex items-center gap-1.5">
-                <Lock className="w-3 h-3 text-[#FFB454]" />
-                <span className="text-[#8B94A3]">DPDP Act 2023 Compliant</span>
-              </span>
-              <span className="text-white/20">•</span>
-              <button
-                type="button"
-                onClick={() => setIsChainModalOpen(true)}
-                className="text-[#8B94A3] hover:text-[#FFB454] transition-colors underline-offset-4 hover:underline cursor-pointer"
-              >
-                Blockchain Ledger
-              </button>
-            </div>
-
-          </div>
-        </div>
-      </footer>
+      <Footer
+        onOpenLedger={() => setIsChainModalOpen(true)}
+        onNewScan={handleReset}
+      />
 
       {/* BLOCKCHAIN AUDIT MODAL EXPLORER */}
       {isChainModalOpen && (
