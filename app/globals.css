@@ -3,19 +3,23 @@
 @tailwind utilities;
 
 :root {
-  --bg-dark: #0A1931;
-  --surface-card: #1A3D63;
-  --accent-primary: #4A7FA7;
-  --accent-light: #B3CFE5;
-  --accent-pale: #F6FAFD;
+  --bg-dark: #0A0E14;
+  --surface-card: #12161F;
+  --accent-primary: #FFB454;
+  --accent-hover: #FF8A3D;
+  --accent-light: #FFC875;
+  --accent-pale: #F1F3F5;
+  --text-heading: #F1F3F5;
+  --text-muted: #8B94A3;
   --font-display: 'Space Grotesk', system-ui, sans-serif;
   --font-body: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 }
 
 body {
-  background-color: #0A1931;
-  color: #F6FAFD;
+  background-color: #0A0E14;
+  background-image: radial-gradient(circle at 50% 0%, #12161F 0%, #0A0E14 70%);
+  color: #F1F3F5;
   font-family: var(--font-body);
   overflow-x: hidden;
   position: relative;
@@ -43,8 +47,8 @@ input, textarea {
 
 /* Navbar background matching UI background */
 header {
-  background-color: rgba(10, 25, 49, 0.95) !important;
-  border-bottom-color: rgba(74, 127, 167, 0.25) !important;
+  background-color: rgba(10, 14, 20, 0.85) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 /* Film grain / noise texture overlay — kills the flat generic dark theme look */
@@ -116,29 +120,29 @@ body::after {
 
 .matte-card {
   background:
-    linear-gradient(#1A3D63, #1A3D63) padding-box,
-    linear-gradient(180deg, rgba(179,207,229,0.12) 0%, rgba(179,207,229,0.04) 50%, transparent 100%) border-box;
+    linear-gradient(#12161F, #12161F) padding-box,
+    linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 50%, transparent 100%) border-box;
   border: 1px solid transparent;
-  border-radius: 0.75rem;
+  border-radius: 20px;
   box-shadow:
-    inset 0 1px 0 0 rgba(179,207,229,0.06),
-    inset 0 0 20px 0 rgba(10,25,49,0.35),
-    0 1px 3px 0 rgba(0,0,0,0.4);
+    inset 0 1px 0 0 rgba(255,255,255,0.05),
+    inset 0 0 20px 0 rgba(10,14,20,0.4),
+    0 4px 20px 0 rgba(0,0,0,0.35);
 }
 
 .matte-card-hover {
-  transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease, transform 0.25s ease;
 }
 .matte-card-hover:hover {
   background:
-    linear-gradient(#1e4570, #1A3D63) padding-box,
-    linear-gradient(180deg, rgba(74,127,167,0.45) 0%, rgba(74,127,167,0.12) 50%, transparent 100%) border-box;
+    linear-gradient(#161B26, #12161F) padding-box,
+    linear-gradient(180deg, rgba(255,180,84,0.3) 0%, rgba(255,180,84,0.08) 50%, transparent 100%) border-box;
   border: 1px solid transparent;
   box-shadow:
-    inset 0 1px 0 0 rgba(74,127,167,0.15),
-    inset 0 0 20px 0 rgba(10,25,49,0.2),
-    0 0 20px 0 rgba(74,127,167,0.1),
-    0 2px 8px 0 rgba(0,0,0,0.5);
+    inset 0 1px 0 0 rgba(255,180,84,0.15),
+    inset 0 0 20px 0 rgba(10,14,20,0.25),
+    0 0 24px 0 rgba(255,180,84,0.08),
+    0 8px 24px 0 rgba(0,0,0,0.45);
 }
 
 /* ============================================================================
@@ -216,6 +220,49 @@ body::after {
   pointer-events: none;
 }
 
+/* ============================================================================
+   SLOW PULSING GLOW RINGS (~2s loop) FOR SCORE BADGES
+   ============================================================================ */
+
+@keyframes pulse-glow-danger {
+  0%, 100% {
+    box-shadow: 0 0 16px -2px rgba(220, 38, 38, 0.25), 0 0 0 1px rgba(220, 38, 38, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px 3px rgba(239, 68, 68, 0.45), 0 0 0 2px rgba(239, 68, 68, 0.55);
+  }
+}
+
+@keyframes pulse-glow-emerald {
+  0%, 100% {
+    box-shadow: 0 0 16px -2px rgba(52, 211, 153, 0.25), 0 0 0 1px rgba(52, 211, 153, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px 3px rgba(52, 211, 153, 0.45), 0 0 0 2px rgba(52, 211, 153, 0.55);
+  }
+}
+
+@keyframes pulse-glow-amber {
+  0%, 100% {
+    box-shadow: 0 0 16px -2px rgba(255, 180, 84, 0.25), 0 0 0 1px rgba(255, 180, 84, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px 3px rgba(255, 180, 84, 0.45), 0 0 0 2px rgba(255, 180, 84, 0.55);
+  }
+}
+
+.score-glow-danger {
+  animation: pulse-glow-danger 2s ease-in-out infinite;
+}
+
+.score-glow-emerald {
+  animation: pulse-glow-emerald 2s ease-in-out infinite;
+}
+
+.score-glow-amber {
+  animation: pulse-glow-amber 2s ease-in-out infinite;
+}
+
 /* Clip-path mask-wipe text reveal — staggered entrance */
 @keyframes wipe-reveal {
   0%   { clip-path: inset(0 100% 0 0); opacity: 0; }
@@ -289,12 +336,12 @@ body::after {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0A1931;
+  background: #0A0E14;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1A3D63;
+  background: #1E2536;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #4A7FA7;
+  background: #FFB454;
 }
