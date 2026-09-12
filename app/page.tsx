@@ -839,7 +839,7 @@ export default function DocumentScreeningApp() {
     }
 
     setAppState('processing');
-    setProcessingProgress(12);
+    setProcessingProgress(15);
     setCurrentStepIndex(0);
     setOfficerDecision(null);
 
@@ -848,17 +848,28 @@ export default function DocumentScreeningApp() {
 
     const progressInterval = setInterval(() => {
       setProcessingProgress((prev) => {
-        if (prev >= 88) return 88;
-        return prev + 8;
-      });
-    }, 350);
+        let next = prev;
+        if (prev < 45) {
+          next = prev + 3.2;
+        } else if (prev < 75) {
+          next = prev + 1.6;
+        } else if (prev < 90) {
+          next = prev + 0.8;
+        } else if (prev < 97) {
+          next = prev + 0.25;
+        } else {
+          next = 97.5;
+        }
 
-    const stepInterval = setInterval(() => {
-      setCurrentStepIndex((prev) => {
-        if (prev < processingSteps.length - 1) return prev + 1;
-        return prev;
+        const calculatedStep = Math.min(
+          Math.floor((next / 100) * processingSteps.length),
+          processingSteps.length - 1
+        );
+        setCurrentStepIndex(calculatedStep);
+
+        return Math.round(next * 10) / 10;
       });
-    }, 450);
+    }, 100);
 
     try {
       const input = selectedPreset || selectedFile!;
@@ -873,9 +884,9 @@ export default function DocumentScreeningApp() {
       }
 
       clearInterval(progressInterval);
-      clearInterval(stepInterval);
       clearTimeout(timeoutId);
       setProcessingProgress(100);
+      setCurrentStepIndex(processingSteps.length - 1);
 
       setTimeout(() => {
         setScreeningResult(result);
@@ -885,10 +896,9 @@ export default function DocumentScreeningApp() {
           setActiveTab('biometrics');
         }
         setAppState('results');
-      }, 300);
+      }, 250);
     } catch (err: any) {
       clearInterval(progressInterval);
-      clearInterval(stepInterval);
       clearTimeout(timeoutId);
       const isAbort = err?.name === 'AbortError' || err?.message?.toLowerCase()?.includes('abort');
       if (isAbort) {

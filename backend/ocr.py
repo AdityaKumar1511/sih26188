@@ -89,21 +89,14 @@ def preprocess_image(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
     open_cv_image = np.array(pil_image)
     open_cv_image = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2BGR)
 
-    # 1. Resize if image is too small or excessively large (optimal 1000-1200px)
+    # 1. Resize if image is excessively large for high-speed processing
     h, w = open_cv_image.shape[:2]
-    if w < 900:
-        scale_factor = 1000 / max(w, 1)
+    if w > 1000:
+        scale_factor = 900 / w
         open_cv_image = cv2.resize(
             open_cv_image,
             (int(w * scale_factor), int(h * scale_factor)),
-            interpolation=cv2.INTER_CUBIC
-        )
-    elif w > 1600:
-        scale_factor = 1200 / w
-        open_cv_image = cv2.resize(
-            open_cv_image,
-            (int(w * scale_factor), int(h * scale_factor)),
-            interpolation=cv2.INTER_AREA
+            interpolation=cv2.INTER_LINEAR
         )
 
     # 2. Grayscale & CLAHE (Contrast-Limited Adaptive Histogram Equalization)
@@ -175,22 +168,15 @@ def perform_ocr(image_bytes: bytes) -> Dict[str, Any]:
                             word_confs.append(conf)
                     if word_confs:
                         avg_word_conf = sum(word_confs) / len(word_confs)
+                    if pass1_ocr_data:
+                        ocr_data = pass1_ocr_data
                 except Exception as e:
                     logger.debug(f"image_to_data error in Pass 1: {e}")
 
-            ocr_data = pass1_ocr_data
-
-            # Early Exit Check: If Pass 1 produced substantial text with high confidence, skip Passes 2 & 3
-            if len(txt1) > 40 and avg_word_conf >= 70:
-                logger.info(
-                    f"OCR Pass 1 produced clean result ({len(txt1)} chars, avg conf: {avg_word_conf:.1f}%). "
-                    f"Early exit triggered — skipping Passes 2 & 3."
-                )
+            # Fast Early Exit: If Pass 1 produced readable text, return immediately!
+            if len(txt1) >= 15:
+                pass
             else:
-                logger.info(
-                    f"OCR Pass 1 result ({len(txt1)} chars, avg conf: {avg_word_conf:.1f}%) below threshold. "
-                    f"Executing multi-pass OCR (Passes 2 & 3)."
-                )
                 # Pass 2: Raw / Grayscale image with PSM 3 (auto segmentation)
                 txt2 = pytesseract.image_to_string(raw_pil, lang='eng', config='--psm 3').strip()
                 if txt2:
