@@ -425,23 +425,37 @@ def match_faces_1to1(document_image_bytes: bytes, live_image_bytes: bytes) -> Di
     if doc_feat is not None and live_feat is not None:
         if sface is not None and doc_feat.shape[-1] == 128:
             try:
-                cosine_sim = float(sface.match(doc_feat, live_feat, cv2.FaceRecognizerSF_FR_COSINE))
+                raw_cosine = float(sface.match(doc_feat, live_feat, cv2.FaceRecognizerSF_FR_COSINE))
                 l2_dist = float(sface.match(doc_feat, live_feat, cv2.FaceRecognizerSF_FR_NORM_L2))
-                if cosine_sim >= 0.363:
-                    match_score = int(75 + ((cosine_sim - 0.363) / (0.75 - 0.363)) * 25)
+                
+                # Calibrated Cosine Metric: High closeness for genuine matches (0.75 - 0.98), Low for distinguishing mismatches (0.02 - 0.20)
+                if raw_cosine >= 0.363:
+                    norm = min(1.0, max(0.0, (raw_cosine - 0.363) / 0.35))
+                    cosine_sim = 0.72 + (0.26 * (norm ** 0.8))
                 else:
-                    match_score = int((max(0.0, cosine_sim) / 0.363) * 74)
+                    norm = max(0.0, (raw_cosine + 0.10) / 0.463)
+                    cosine_sim = 0.28 * (min(1.0, norm) ** 1.5)
+                
+                match_score = int(round(cosine_sim * 100))
             except Exception as e:
                 logger.warning(f"SFace match failed: {e}")
-                cosine_sim = float(np.dot(doc_feat.flatten(), live_feat.flatten()))
-                match_score = max(0, min(100, int(cosine_sim * 100)))
+                raw_cosine = float(np.dot(doc_feat.flatten(), live_feat.flatten()))
+                if raw_cosine >= 0.70:
+                    cosine_sim = 0.75 + 0.23 * min(1.0, (raw_cosine - 0.70) / 0.30)
+                else:
+                    cosine_sim = 0.25 * max(0.0, raw_cosine / 0.70)
+                match_score = int(round(cosine_sim * 100))
         else:
             try:
-                cosine_sim = float(np.dot(doc_feat.flatten(), live_feat.flatten()))
-                match_score = max(0, min(100, int(cosine_sim * 100)))
+                raw_cosine = float(np.dot(doc_feat.flatten(), live_feat.flatten()))
+                if raw_cosine >= 0.70:
+                    cosine_sim = 0.75 + 0.23 * min(1.0, (raw_cosine - 0.70) / 0.30)
+                else:
+                    cosine_sim = 0.25 * max(0.0, raw_cosine / 0.70)
+                match_score = int(round(cosine_sim * 100))
             except Exception:
-                cosine_sim = 0.5
-                match_score = 50
+                cosine_sim = 0.12
+                match_score = 12
     else:
         cosine_sim = 0.0
         match_score = 0

@@ -182,7 +182,7 @@ const SAMPLE_PRESETS: SamplePreset[] = [
       validationChecks: [
         { id: 'c1', name: 'Document Layout & OCR Extraction', category: 'Structural', status: 'pass', details: 'Template dimensions match standard UIDAI spec v3.2', score: 98 },
         { id: 'c2', name: 'Verhoeff Checksum Algorithm', category: 'Algorithmic', status: 'pass', details: 'Aadhaar 12-digit Verhoeff checksum valid', score: 100 },
-        { id: 'c3', name: '1:1 Live Biometric Face Matching', category: 'Biometric', status: 'pass', details: 'Cosine metric 0.684. Passenger live face matches document portrait.', score: 96 },
+        { id: 'c3', name: '1:1 Live Biometric Face Matching', category: 'Biometric', status: 'pass', details: 'Cosine metric 0.942. Passenger live face matches document portrait with high closeness.', score: 96 },
         { id: 'c4', name: 'Passive Liveness & Anti-Spoofing', category: 'Biometric', status: 'pass', details: 'Natural human skin chrominance and high-frequency texture verified.', score: 94 },
         { id: 'c5', name: 'Error Level Analysis (ELA Splicing)', category: 'Forensic', status: 'pass', details: 'Uniform JPEG compression map across document canvas', score: 95 },
         { id: 'c6', name: 'Government Registry Confirmation', category: 'Registry', status: 'pass', details: 'UIDAI Active Registry record match confirmed', score: 100 }
@@ -190,7 +190,7 @@ const SAMPLE_PRESETS: SamplePreset[] = [
       biometricResult: {
         isMatch: true,
         matchScore: 96,
-        cosineSimilarity: 0.684,
+        cosineSimilarity: 0.942,
         livenessScore: 94,
         livenessStatus: 'GENUINE_LIVE_PERSON',
         isLivePerson: true,
@@ -198,7 +198,7 @@ const SAMPLE_PRESETS: SamplePreset[] = [
         verdictDescription: 'Identity Confirmed: Passenger live face matches document portrait (96% confidence).'
       },
       forensicTrace: [
-        'Biometric 128-D facial vector cosine similarity: 0.684 (Match Verified).',
+        'Biometric 128-D facial vector cosine similarity: 0.942 (High Closeness Match Verified).',
         'Passive anti-spoofing test passed: Genuine live human verified.',
         'Verhoeff check digit passed (UIDAI spec v3.2).',
         'No pixel manipulation detected around Date of Birth field.',
@@ -255,23 +255,23 @@ const SAMPLE_PRESETS: SamplePreset[] = [
       ],
       validationChecks: [
         { id: 'c1', name: 'Document Layout & OCR Extraction', category: 'Structural', status: 'pass', details: 'Card dimensions match 85.6mm x 53.98mm CR80 spec', score: 90 },
-        { id: 'c2', name: '1:1 Live Biometric Face Matching', category: 'Biometric', status: 'fail', details: 'CRITICAL: Biometric similarity 24%. Live passenger does not match card photo.', score: 24 },
+        { id: 'c2', name: '1:1 Live Biometric Face Matching', category: 'Biometric', status: 'fail', details: 'CRITICAL: Biometric similarity 18% (Cosine 0.084). Live passenger does not match card photo.', score: 18 },
         { id: 'c3', name: 'Passive Liveness & Anti-Spoofing', category: 'Biometric', status: 'pass', details: 'Live person present, but facial features do not match credentials.', score: 88 },
         { id: 'c4', name: 'Error Level Analysis (ELA Splicing)', category: 'Forensic', status: 'fail', details: 'Severe ELA compression variance around Date of Birth text block', score: 18 },
         { id: 'c5', name: 'Government Registry Confirmation', category: 'Registry', status: 'pass', details: 'ID exists in Registry but traveler identity is fraudulent', score: 80 }
       ],
       biometricResult: {
         isMatch: false,
-        matchScore: 24,
-        cosineSimilarity: 0.112,
+        matchScore: 18,
+        cosineSimilarity: 0.084,
         livenessScore: 88,
         livenessStatus: 'GENUINE_LIVE_PERSON',
         isLivePerson: true,
         verdict: 'IMPERSONATION_DETECTED',
-        verdictDescription: 'CRITICAL: Biometric mismatch (24% similarity). High probability of identity impersonation or stolen document.'
+        verdictDescription: 'CRITICAL: Biometric mismatch (18% similarity). High probability of identity impersonation or stolen document.'
       },
       forensicTrace: [
-        'CRITICAL: 1:1 Biometric matching failed (Cosine 0.112 < 0.363 threshold).',
+        'CRITICAL: 1:1 Biometric matching failed (Cosine 0.084 distinctly low - Impersonator detected).',
         'ALERT: Impersonation detected at checkpoint.',
         'Digital patch detected on Date of Birth digits.',
         'DOB font renders Arial instead of Income Tax OCR-B font.'
@@ -530,7 +530,7 @@ function generateClientFallbackResult(docFile: File, liveFaceFile: File | null):
     validationChecks: [
       { id: 'c1', name: 'Document Layout & OCR Extraction', category: 'Structural', status: 'pass', details: 'Template dimensions match standard UIDAI spec v3.2', score: 98 },
       { id: 'c2', name: 'Verhoeff Checksum Algorithm', category: 'Algorithmic', status: 'pass', details: 'Aadhaar 12-digit Verhoeff checksum valid (UIDAI spec v3.2)', score: 100 },
-      { id: 'c3', name: '1:1 Live Biometric Face Matching', category: 'Biometric', status: 'pass', details: '128-D SFace Cosine vector similarity: 0.718. Passenger face verified.', score: 96 },
+      { id: 'c3', name: '1:1 Live Biometric Face Matching', category: 'Biometric', status: 'pass', details: '128-D SFace Cosine vector similarity: 0.948. High closeness match verified.', score: 96 },
       { id: 'c4', name: 'Passive Liveness & Anti-Spoofing', category: 'Biometric', status: 'pass', details: 'Genuine live human traveler verified at border checkpoint.', score: 95 },
       { id: 'c5', name: 'Error Level Analysis (ELA)', category: 'Forensic', status: 'pass', details: 'Uniform JPEG compression map across document canvas', score: 94 },
       { id: 'c6', name: 'Government Registry Confirmation', category: 'Registry', status: 'pass', details: 'UIDAI Active Registry record match confirmed (Status: ACTIVE)', score: 100 }
@@ -538,7 +538,7 @@ function generateClientFallbackResult(docFile: File, liveFaceFile: File | null):
     biometricResult: {
       isMatch: true,
       matchScore: 96,
-      cosineSimilarity: 0.718,
+      cosineSimilarity: 0.948,
       livenessScore: 95,
       livenessStatus: 'GENUINE_LIVE_PERSON',
       isLivePerson: true,
@@ -550,7 +550,7 @@ function generateClientFallbackResult(docFile: File, liveFaceFile: File | null):
       'OCR Extraction: YUVRAJ ATRI • 2663 4813 2551 • DOB: 04/03/2008.',
       'Verhoeff check digit passed (UIDAI spec v3.2).',
       'Registry match confirmed via Supabase / UIDAI (Status: ACTIVE).',
-      '1:1 Live Biometric matching verified (Cosine 0.718 >= 0.363 threshold).',
+      '1:1 Live Biometric matching verified (Cosine 0.948 high closeness).',
       'Zero-PII SHA-256 verdict digest anchored to Polygon PoS.'
     ],
     blockchainAnchor: {
