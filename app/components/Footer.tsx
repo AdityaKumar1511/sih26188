@@ -32,7 +32,7 @@ export default function Footer({ onOpenLedger, onNewScan }: FooterProps) {
             {/* Column 1: Brand & Terminal Info (Span 4) */}
             <div className="lg:col-span-4 space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FFB454] to-[#FF8A3D] flex items-center justify-center text-[#0A0E14] shadow-[0_0_20px_rgba(255,180,84,0.3)] ring-1 ring-white/20">
+                <div className="w-10 h-10 rounded-md bg-[#FFB454] flex items-center justify-center text-[#0A0E14] border border-[#FFB454]">
                   <ShieldCheck className="w-5 h-5 stroke-[2.2]" />
                 </div>
                 <div>
@@ -40,7 +40,7 @@ export default function Footer({ onOpenLedger, onNewScan }: FooterProps) {
                     <span className="font-display font-black text-base tracking-tight uppercase text-[#F1F3F5]">
                       SENTINEL PROTOCOL
                     </span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#FFB454]/10 text-[#FFB454] border border-[#FFB454]/25">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#FFB454]/10 text-[#FFB454] border border-[#FFB454]/25">
                       v2.6.4-prod
                     </span>
                   </div>
@@ -56,11 +56,11 @@ export default function Footer({ onOpenLedger, onNewScan }: FooterProps) {
 
               {/* Status Chips */}
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-[10px] font-mono text-emerald-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/25 text-[10px] font-mono text-emerald-400">
+                  <span className="w-1.5 h-1.5 rounded-sm bg-emerald-400 animate-pulse" />
                   <span>Polygon Amoy Active</span>
                 </div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[10px] font-mono text-[#F1F3F5]">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-[10px] font-mono text-[#F1F3F5]">
                   <Lock className="w-3 h-3 text-[#FFB454]" />
                   <span>Zero-PII Storage</span>
                 </div>
@@ -155,7 +155,7 @@ export default function Footer({ onOpenLedger, onNewScan }: FooterProps) {
               <p className="text-[11px] text-[#8B94A3] leading-relaxed">
                 Operates strictly under India's Digital Personal Data Protection (DPDP) Act 2023. Biometric templates are processed transiently in volatile memory; only cryptographic hash receipts are sealed to the ledger.
               </p>
-              <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] text-[11px] font-mono space-y-1">
+              <div className="p-3 rounded-md bg-[#12161F] border border-white/[0.08] text-[11px] font-mono space-y-1">
                 <div className="text-[#FFB454] font-semibold flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5" />
                   <span>ISO/IEC 30107-3 Biometric Liveness</span>
@@ -178,7 +178,7 @@ export default function Footer({ onOpenLedger, onNewScan }: FooterProps) {
 
             <div className="flex items-center gap-4 text-[#8B94A3]">
               <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="w-1.5 h-1.5 rounded-sm bg-emerald-400" />
                 <span>Node 01: Operational</span>
               </span>
               <span className="text-white/20">•</span>

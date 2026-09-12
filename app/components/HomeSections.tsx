@@ -115,7 +115,7 @@ export default function HomeSections() {
       <section id="how-it-works" className="space-y-12">
         <ScrollReveal direction="up" delay={0.1}>
           <div className="text-center max-w-3xl mx-auto space-y-3 px-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px] font-mono text-[#FFB454]">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-[#12161F] border border-white/10 text-[11px] font-mono text-[#FFB454]">
               <Layers className="w-3.5 h-3.5" />
               <span className="uppercase tracking-widest font-semibold">MULTIMODAL PIPELINE</span>
             </div>
@@ -133,7 +133,7 @@ export default function HomeSections() {
             const Icon = step.icon;
             return (
               <StaggerItem key={idx} direction="up" distance={30}>
-                <div className="rounded-[20px] bg-white/[0.03] backdrop-blur-xl border border-white/[0.08] p-6 flex flex-col justify-between h-full space-y-6 hover:border-white/[0.18] hover:shadow-[0_16px_36px_rgba(0,0,0,0.5),0_0_24px_rgba(255,180,84,0.06)] transition-all duration-300 group">
+                <div className="rounded-lg bg-[#12161F] border border-[#2A344A] p-6 flex flex-col justify-between h-full space-y-6 hover:border-[#3D4A66] transition-colors duration-200 group">
                   <div className="space-y-4">
                     
                     {/* Header Row: Step Number & Icon */}
@@ -141,7 +141,7 @@ export default function HomeSections() {
                       <span className="font-mono font-black text-2xl text-[#FFB454] tracking-tight">
                         {step.number}
                       </span>
-                      <div className="w-10 h-10 rounded-xl bg-white/[0.05] border border-white/10 flex items-center justify-center text-[#FFB454] group-hover:scale-110 transition-transform">
+                      <div className="w-10 h-10 rounded-md bg-[#161B26] border border-[#2A344A] flex items-center justify-center text-[#FFB454]">
                         <Icon className="w-5 h-5" />
                       </div>
                     </div>
@@ -165,7 +165,7 @@ export default function HomeSections() {
                     {step.tags.map((tag, tIdx) => (
                       <span
                         key={tIdx}
-                        className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/[0.04] text-[#8B94A3] border border-white/[0.06]"
+                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#161B26] text-[#8B94A3] border border-white/[0.06]"
                       >
                         {tag}
                       </span>
@@ -185,7 +185,7 @@ export default function HomeSections() {
       <section id="detection-capabilities" className="space-y-12">
         <ScrollReveal direction="up" delay={0.1}>
           <div className="text-center max-w-3xl mx-auto space-y-3 px-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px] font-mono text-[#FFB454]">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-[#12161F] border border-white/10 text-[11px] font-mono text-[#FFB454]">
               <ShieldCheck className="w-3.5 h-3.5" />
               <span className="uppercase tracking-widest font-semibold">SECURITY DEFENSE MATRIX</span>
             </div>
@@ -203,10 +203,10 @@ export default function HomeSections() {
             const Icon = cap.icon;
             return (
               <StaggerItem key={idx} direction="up" distance={25}>
-                <div className="rounded-[20px] bg-white/[0.03] backdrop-blur-xl border border-white/[0.08] p-5 space-y-3 hover:border-white/[0.16] hover:bg-white/[0.05] transition-all duration-300 h-full flex flex-col justify-between">
+                <div className="rounded-lg bg-[#12161F] border border-[#2A344A] p-5 space-y-3 hover:border-[#3D4A66] transition-colors duration-200 h-full flex flex-col justify-between">
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-center text-[#FFB454]">
+                      <div className="w-9 h-9 rounded-md bg-[#161B26] border border-[#2A344A] flex items-center justify-center text-[#FFB454]">
                         <Icon className="w-4 h-4" />
                       </div>
                       <span className="text-[10px] font-mono text-[#8B94A3] tracking-wider uppercase">
@@ -239,7 +239,7 @@ export default function HomeSections() {
       {/* ================================================================== */}
       <section className="space-y-8">
         <ScrollReveal direction="up" delay={0.1}>
-          <div className="rounded-[24px] bg-white/[0.03] backdrop-blur-xl border border-white/[0.08] p-8 lg:p-10 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+          <div className="rounded-lg bg-[#12161F] border border-[#2A344A] p-8 lg:p-10 shadow-md">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 divide-y lg:divide-y-0 lg:divide-x divide-white/[0.08]">
               {metrics.map((m, idx) => (
                 <div key={idx} className={`space-y-1.5 ${idx > 0 ? 'pt-6 lg:pt-0 lg:pl-8' : ''}`}>

@@ -18,7 +18,6 @@
 
 body {
   background-color: #0A0E14;
-  background-image: radial-gradient(circle at 50% 0%, #12161F 0%, #0A0E14 70%);
   color: #F1F3F5;
   font-family: var(--font-body);
   overflow-x: hidden;
@@ -45,27 +44,25 @@ input, textarea {
   display: none !important;
 }
 
-/* Navbar and Footer background matching UI background seamlessly (Option 1: Seamless Deep Void) */
+/* Navbar and Footer background matching UI background seamlessly */
 header {
   background-color: #0A0E14 !important;
-  background-image: radial-gradient(circle at 50% 0%, #12161F 0%, #0A0E14 100%) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
 footer {
-  background-color: #080B10 !important;
-  background-image: linear-gradient(180deg, #0A0E14 0%, #080B10 100%) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+  background-color: #0A0E14 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
-/* Film grain / noise texture overlay — kills the flat generic dark theme look */
+/* Subtle texture overlay */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: 9999;
   pointer-events: none;
-  opacity: 0.03;
+  opacity: 0.02;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 256px 256px;
@@ -79,29 +76,15 @@ body::after {
   z-index: 0;
   pointer-events: none;
   background-image: 
-    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
   background-size: 60px 60px;
-  filter: blur(1.5px);
-  mask-image: radial-gradient(ellipse 85% 75% at 50% 35%, black 25%, transparent 85%);
-  -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 35%, black 25%, transparent 85%);
-  opacity: 0.8;
+  opacity: 0.6;
 }
 
-/* Dynamic Cursor Hover Spotlight — reveals a sharp, vibrant cyber grid under the cursor */
+/* Dynamic Cursor Hover Spotlight */
 .grid-spotlight {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(to right, rgba(255, 180, 84, 0.15) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 180, 84, 0.15) 1px, transparent 1px),
-    radial-gradient(380px circle at var(--mouse-x, -500px) var(--mouse-y, -500px), rgba(255, 180, 84, 0.08), transparent 70%);
-  background-size: 60px 60px, 60px 60px, 100% 100%;
-  mask-image: radial-gradient(420px circle at var(--mouse-x, -500px) var(--mouse-y, -500px), black 0%, transparent 100%);
-  -webkit-mask-image: radial-gradient(420px circle at var(--mouse-x, -500px) var(--mouse-y, -500px), black 0%, transparent 100%);
-  transition: opacity 0.25s ease;
+  display: none !important;
 }
 
 /* ============================================================================
@@ -122,34 +105,22 @@ body::after {
 }
 
 /* ============================================================================
-   LAYERED DEPTH CARDS — gradient border + inset shadow
+   MATTE DEPTH CARDS — solid background + crisp matte border
    ============================================================================ */
 
 .matte-card {
-  background:
-    linear-gradient(#12161F, #12161F) padding-box,
-    linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 50%, transparent 100%) border-box;
-  border: 1px solid transparent;
-  border-radius: 20px;
-  box-shadow:
-    inset 0 1px 0 0 rgba(255,255,255,0.05),
-    inset 0 0 20px 0 rgba(10,14,20,0.4),
-    0 4px 20px 0 rgba(0,0,0,0.35);
+  background-color: #12161F;
+  border: 1px solid #2A344A;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.35);
 }
 
 .matte-card-hover {
-  transition: box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease, transform 0.25s ease;
+  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
 }
 .matte-card-hover:hover {
-  background:
-    linear-gradient(#161B26, #12161F) padding-box,
-    linear-gradient(180deg, rgba(255,180,84,0.3) 0%, rgba(255,180,84,0.08) 50%, transparent 100%) border-box;
-  border: 1px solid transparent;
-  box-shadow:
-    inset 0 1px 0 0 rgba(255,180,84,0.15),
-    inset 0 0 20px 0 rgba(10,14,20,0.25),
-    0 0 24px 0 rgba(255,180,84,0.08),
-    0 8px 24px 0 rgba(0,0,0,0.45);
+  background-color: #161B26;
+  border-color: #3D4A66;
 }
 
 /* ============================================================================
@@ -159,8 +130,8 @@ body::after {
 /* Horizontal scanline laser sweep — loops across a card/zone */
 @keyframes scanline-sweep {
   0%   { transform: translateY(-100%); opacity: 0; }
-  10%  { opacity: 1; }
-  90%  { opacity: 1; }
+  10%  { opacity: 0.8; }
+  90%  { opacity: 0.8; }
   100% { transform: translateY(800%); opacity: 0; }
 }
 
@@ -174,33 +145,20 @@ body::after {
   position: absolute;
   left: 0;
   right: 0;
-  height: 2px;
+  height: 1.5px;
   top: 0;
-  background: linear-gradient(90deg,
-    transparent 0%,
-    rgba(255, 180, 84, 0.15) 15%,
-    rgba(255, 180, 84, 0.8) 50%,
-    rgba(255, 180, 84, 0.15) 85%,
-    transparent 100%
-  );
-  box-shadow: 0 0 12px 2px rgba(255, 180, 84, 0.25);
+  background: #FFB454;
+  opacity: 0.6;
   animation: scanline-sweep 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   pointer-events: none;
   z-index: 10;
 }
 
 .scan-zone:hover::after {
-  background: linear-gradient(90deg,
-    transparent 0%,
-    rgba(255, 180, 84, 0.3) 15%,
-    rgba(255, 180, 84, 1.0) 50%,
-    rgba(255, 180, 84, 0.3) 85%,
-    transparent 100%
-  );
-  box-shadow: 0 0 20px 4px rgba(255, 180, 84, 0.4);
+  opacity: 0.9;
 }
 
-/* Status pill scanning line — sweeps across like a live indicator */
+/* Status pill indicator */
 @keyframes pill-scan {
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(300%); }
@@ -211,50 +169,34 @@ body::after {
   overflow: hidden;
 }
 
-.status-pill::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 40%;
-  height: 100%;
-  background: linear-gradient(90deg,
-    transparent,
-    rgba(255, 180, 84, 0.15),
-    transparent
-  );
-  animation: pill-scan 3s ease-in-out infinite;
-  pointer-events: none;
-}
-
 /* ============================================================================
-   SLOW PULSING GLOW RINGS (~2s loop) FOR SCORE BADGES
+   MATTE PULSING BORDER RINGS (~2s loop) FOR SCORE BADGES (NO NEON GLOW)
    ============================================================================ */
 
 @keyframes pulse-glow-danger {
   0%, 100% {
-    box-shadow: 0 0 16px -2px rgba(220, 38, 38, 0.25), 0 0 0 1px rgba(220, 38, 38, 0.3);
+    border-color: rgba(220, 38, 38, 0.3);
   }
   50% {
-    box-shadow: 0 0 30px 3px rgba(239, 68, 68, 0.45), 0 0 0 2px rgba(239, 68, 68, 0.55);
+    border-color: rgba(239, 68, 68, 0.8);
   }
 }
 
 @keyframes pulse-glow-emerald {
   0%, 100% {
-    box-shadow: 0 0 16px -2px rgba(52, 211, 153, 0.25), 0 0 0 1px rgba(52, 211, 153, 0.3);
+    border-color: rgba(52, 211, 153, 0.3);
   }
   50% {
-    box-shadow: 0 0 30px 3px rgba(52, 211, 153, 0.45), 0 0 0 2px rgba(52, 211, 153, 0.55);
+    border-color: rgba(52, 211, 153, 0.8);
   }
 }
 
 @keyframes pulse-glow-amber {
   0%, 100% {
-    box-shadow: 0 0 16px -2px rgba(255, 180, 84, 0.25), 0 0 0 1px rgba(255, 180, 84, 0.3);
+    border-color: rgba(255, 180, 84, 0.3);
   }
   50% {
-    box-shadow: 0 0 30px 3px rgba(255, 180, 84, 0.45), 0 0 0 2px rgba(255, 180, 84, 0.55);
+    border-color: rgba(255, 180, 84, 0.8);
   }
 }
 
@@ -303,34 +245,31 @@ body::after {
 .reveal-up-delay-3 { animation-delay: 0.45s; }
 
 /* ============================================================================
-   MICRO-INTERACTIONS — Buttons & Interactive Elements
+   MICRO-INTERACTIONS — Buttons & Interactive Elements (Clean Matte)
    ============================================================================ */
 
-/* Scale + glow hover for action buttons */
+/* Scale & crisp hover for action buttons */
 .btn-interactive {
   transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1),
-              box-shadow 0.2s ease;
+              background-color 0.15s ease,
+              border-color 0.15s ease;
 }
 
 .btn-interactive:hover {
-  transform: scale(1.03) translateY(-1px);
-  box-shadow: 0 0 24px rgba(255, 180, 84, 0.2),
-              0 4px 12px rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
 }
 
 .btn-interactive:active {
-  transform: scale(0.98);
-  box-shadow: none;
-  transition-duration: 0.05s;
+  transform: translateY(0);
 }
 
-/* Subtle glow on any interactive card/element */
+/* Subtle border highlight on interactive elements */
 .hover-glow {
-  transition: box-shadow 0.2s ease, transform 0.15s ease;
+  transition: border-color 0.15s ease, transform 0.15s ease;
 }
 
 .hover-glow:hover {
-  box-shadow: 0 0 30px rgba(255, 180, 84, 0.15);
+  border-color: #3D4A66;
   transform: translateY(-1px);
 }
 
@@ -354,13 +293,12 @@ body::after {
 
 ::-webkit-scrollbar-thumb {
   background: #1E2536;
-  border-radius: 9999px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: #FFB454;
-  box-shadow: 0 0 10px rgba(255, 180, 84, 0.4);
 }
 
 /* ============================================================================

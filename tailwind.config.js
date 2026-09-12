@@ -65,12 +65,12 @@ module.exports = {
         mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
       },
       boxShadow: {
-        'glow-danger': '0 0 20px 2px rgba(220, 38, 38, 0.25)',
-        'glow-accent': '0 0 24px 2px rgba(255, 180, 84, 0.25)',
-        'glass-card': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+        'glow-danger': '0 1px 3px rgba(0, 0, 0, 0.3)',
+        'glow-accent': '0 1px 3px rgba(0, 0, 0, 0.3)',
+        'glass-card': '0 4px 12px 0 rgba(0, 0, 0, 0.3)',
       },
       borderRadius: {
-        'card': '20px',
+        'card': '8px',
       },
     },
   },
