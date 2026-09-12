@@ -343,25 +343,7 @@ const SAMPLE_PRESETS: SamplePreset[] = [
 // ============================================================================
 
 function getApiBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, '');
-  }
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (
-      host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host === '0.0.0.0' ||
-      host.startsWith('192.168.') ||
-      host.startsWith('10.') ||
-      host.startsWith('172.') ||
-      host.endsWith('.lhr.life') ||
-      host.endsWith('.loca.lt')
-    ) {
-      return '/api/backend';
-    }
-  }
-  return 'https://sih-sentinel-backend.onrender.com';
+  return '/api/backend';
 }
 
 async function analyzeDocumentWithBiometrics(
