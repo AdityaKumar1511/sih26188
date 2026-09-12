@@ -168,86 +168,49 @@ def perform_ocr(image_bytes: bytes) -> Dict[str, Any]:
 
     if pytesseract is not None:
         try:
-            txt1, txt2, txt3 = "", "", ""
-            # Pass 1: CLAHE image with PSM 6 (best for identity card layouts)
-            clahe_img = next((img for label, img in preprocessed_images if label == "clahe"), raw_pil)
-            txt1 = pytesseract.image_to_string(clahe_img, lang='eng', config='--psm 6').strip()
-            
-            pass1_ocr_data = []
-            avg_word_conf = 0.0
+            # Pass 1: Deskewed / Raw image with PSM 3 (Auto segmentation - best for full layout, PAN numbers, names, DOB)
+            deskewed_pil = next((img for label, img in preprocessed_images if label == "deskewed"), raw_pil)
+            txt1 = pytesseract.image_to_string(deskewed_pil, lang='eng', config='--psm 3').strip()
             if txt1:
                 all_texts.append(txt1)
                 best_text = txt1
                 engine_used = "tesseract"
 
-                # Extract word bounding boxes and confidences from CLAHE image
-                try:
-                    data_dict = pytesseract.image_to_data(clahe_img, output_type=pytesseract.Output.DICT)
-                    word_confs = []
-                    for i in range(len(data_dict['text'])):
-                        t = data_dict['text'][i].strip()
-                        conf = int(data_dict['conf'][i])
-                        if t and conf > 15:
-                            pass1_ocr_data.append({
-                                "text": t,
-                                "conf": conf,
-                                "left": data_dict['left'][i],
-                                "top": data_dict['top'][i],
-                                "width": data_dict['width'][i],
-                                "height": data_dict['height'][i]
-                            })
-                            word_confs.append(conf)
-                    if word_confs:
-                        avg_word_conf = sum(word_confs) / len(word_confs)
-                    if pass1_ocr_data:
-                        ocr_data = pass1_ocr_data
-                except Exception as e:
-                    logger.debug(f"image_to_data error in Pass 1: {e}")
+            # Pass 2: CLAHE image with PSM 6 (Uniform block - best for structured cards & high-contrast Aadhaar)
+            clahe_img = next((img for label, img in preprocessed_images if label == "clahe"), raw_pil)
+            txt2 = pytesseract.image_to_string(clahe_img, lang='eng', config='--psm 6').strip()
+            if txt2:
+                all_texts.append(txt2)
+                if not best_text or len(txt2) > len(best_text):
+                    best_text = txt2
+                engine_used = "tesseract"
 
-            # Fast Early Exit: If Pass 1 produced readable text, return immediately!
-            if len(txt1) >= 15:
-                pass
-            else:
-                # Pass 2: Raw / Grayscale image with PSM 3 (auto segmentation)
-                txt2 = pytesseract.image_to_string(raw_pil, lang='eng', config='--psm 3').strip()
-                if txt2:
-                    all_texts.append(txt2)
-                    if len(txt2) > len(best_text):
-                        best_text = txt2
-                        engine_used = "tesseract"
+            # Pass 3: Thresholded image with PSM 6 (Great for MRZ / stamped high contrast text)
+            thresh_img = next((img for label, img in preprocessed_images if label == "threshold"), None)
+            if thresh_img is not None:
+                txt3 = pytesseract.image_to_string(thresh_img, lang='eng', config='--psm 6').strip()
+                if txt3:
+                    all_texts.append(txt3)
+                    engine_used = "tesseract"
 
-                # Pass 3: Thresholded image with PSM 6 (great for MRZ / stamped text)
-                thresh_img = next((img for label, img in preprocessed_images if label == "threshold"), None)
-                if thresh_img:
-                    txt3 = pytesseract.image_to_string(thresh_img, lang='eng', config='--psm 6').strip()
-                    if txt3:
-                        all_texts.append(txt3)
-                        if len(txt3) > len(best_text):
-                            best_text = txt3
-                            engine_used = "tesseract"
-
-                # If a later pass yielded the best text, extract word boxes from that image
-                if best_text and (not ocr_data or best_text != txt1):
-                    try:
-                        target_img = thresh_img if (thresh_img is not None and best_text == txt3) else (raw_pil if best_text == txt2 else clahe_img)
-                        data_dict = pytesseract.image_to_data(target_img, output_type=pytesseract.Output.DICT)
-                        new_ocr_data = []
-                        for i in range(len(data_dict['text'])):
-                            t = data_dict['text'][i].strip()
-                            conf = int(data_dict['conf'][i])
-                            if t and conf > 15:
-                                new_ocr_data.append({
-                                    "text": t,
-                                    "conf": conf,
-                                    "left": data_dict['left'][i],
-                                    "top": data_dict['top'][i],
-                                    "width": data_dict['width'][i],
-                                    "height": data_dict['height'][i]
-                                })
-                        if new_ocr_data:
-                            ocr_data = new_ocr_data
-                    except Exception:
-                        pass
+            # Extract word bounding boxes and confidences
+            try:
+                target_img = clahe_img if clahe_img is not None else raw_pil
+                data_dict = pytesseract.image_to_data(target_img, output_type=pytesseract.Output.DICT)
+                for i in range(len(data_dict['text'])):
+                    t = data_dict['text'][i].strip()
+                    conf = int(data_dict['conf'][i])
+                    if t and conf > 15:
+                        ocr_data.append({
+                            "text": t,
+                            "conf": conf,
+                            "left": data_dict['left'][i],
+                            "top": data_dict['top'][i],
+                            "width": data_dict['width'][i],
+                            "height": data_dict['height'][i]
+                        })
+            except Exception as e:
+                logger.debug(f"image_to_data error: {e}")
 
         except Exception as e:
             logger.warning(f"Pytesseract failed: {e}")
@@ -421,6 +384,12 @@ def _score_name_candidate(name: str) -> int:
     else:
         score += 10
 
+    # Bonus for clean English Title Casing (e.g. "Yuvraj Atri")
+    if re.match(r'^[A-Z][a-z]+\s+[A-Z][a-z]+$', name):
+        score += 60
+    elif re.match(r'^[A-Z]{3,}\s+[A-Z]{3,}$', name):
+        score += 45
+
     avg_len = sum(len(w) for w in words) / len(words)
     if avg_len >= 3.5:
         score += 25
@@ -432,7 +401,8 @@ def _score_name_candidate(name: str) -> int:
 
 
 def _extract_best_name(lines: List[str], dob_line_idx: int, all_texts: List[str]) -> Tuple[Optional[str], int]:
-    """Extracts best demographic name from OCR lines."""
+    """Extracts best demographic name from OCR lines using positional priors and multi-pass consensus."""
+    from collections import Counter
     candidates: List[Tuple[str, int]] = []
 
     # 1. Line immediately before DOB (strongest Aadhaar signal: name sits 1 or 2 lines above DOB)
@@ -447,7 +417,7 @@ def _extract_best_name(lines: List[str], dob_line_idx: int, all_texts: List[str]
                         s = _score_name_candidate(name)
                         if s > 0:
                             # Higher bonus for the line directly above DOB
-                            bonus = 90 if offset == 1 else (70 if offset == 2 else 40)
+                            bonus = 100 if offset == 1 else (75 if offset == 2 else 40)
                             candidates.append((name, s + bonus))
 
     # 2. Lines following explicit Name / Given Name labels
@@ -459,7 +429,7 @@ def _extract_best_name(lines: List[str], dob_line_idx: int, all_texts: List[str]
             if cand_inline and not _is_header_or_noise(cand_inline):
                 s_inline = _score_name_candidate(cand_inline)
                 if s_inline > 0:
-                    candidates.append((cand_inline, s_inline + 50))
+                    candidates.append((cand_inline, s_inline + 60))
 
         if re.search(r'\b(GIVEN\s*NAME|GIVEN\s*NAMES|NAME|FULL\s*NAME|नाम)\b', upper):
             if i + 1 < len(lines):
@@ -469,9 +439,10 @@ def _extract_best_name(lines: List[str], dob_line_idx: int, all_texts: List[str]
                     if name and not _is_header_or_noise(name):
                         s = _score_name_candidate(name)
                         if s > 0:
-                            candidates.append((name, s + 45))
+                            candidates.append((name, s + 50))
 
     # 3. Consensus across all OCR passes
+    pass_candidates = []
     for txt in all_texts:
         for l in txt.split('\n'):
             l_clean = l.strip()
@@ -480,13 +451,20 @@ def _extract_best_name(lines: List[str], dob_line_idx: int, all_texts: List[str]
                 if name and not _is_header_or_noise(name):
                     s = _score_name_candidate(name)
                     if s >= 40:
+                        pass_candidates.append(name)
                         candidates.append((name, s))
 
     if not candidates:
         return None, 0
 
-    candidates.sort(key=lambda x: x[1], reverse=True)
-    return candidates[0][0], candidates[0][1]
+    freq = Counter(pass_candidates)
+    scored_candidates = []
+    for name, s in candidates:
+        count_bonus = (freq.get(name, 1) - 1) * 35
+        scored_candidates.append((name, s + count_bonus))
+
+    scored_candidates.sort(key=lambda x: x[1], reverse=True)
+    return scored_candidates[0][0], scored_candidates[0][1]
 
 
 # ==============================================================================
@@ -594,37 +572,97 @@ def _repair_passport_ocr(raw_text: str) -> Optional[str]:
         if re.match(r'^[A-Z]\d{7}$', candidate):
             return candidate
 
+def _repair_passport_ocr(raw_text: str) -> Optional[str]:
+    """
+    Detects and repairs Passport number:
+    - Indian Passport: 1 letter + 7 digits (e.g. J1181920)
+    - International Passport: 7-9 alphanumeric characters (e.g. KV2424725)
+    """
+    upper = raw_text.upper()
+
+    digit_to_char = {'0': 'O', '1': 'I', '2': 'Z', '5': 'S', '8': 'B', '7': 'T', '6': 'G', '4': 'J'}
+    char_to_digit = {'O': '0', 'I': '1', 'l': '1', 'Z': '2', 'S': '5', 'B': '8', 'D': '0'}
+
+    # 1. Label match (PASSPORT NO / PASAPORTE NO / PASSEPORT NO)
+    label_match = re.search(r'(?:PASSPORT|PASAPORTE|PASSEPORT)\s*(?:NO|NUMBER)?[\s\.\:\/\-]*([A-Z0-9]{7,10})\b', upper)
+    if label_match:
+        cand = label_match.group(1).replace(' ', '')
+        if re.match(r'^[A-Z]\d{7}$', cand) or re.match(r'^[A-Z0-9]{7,9}$', cand):
+            return cand
+
+    # 2. Spaced format: e.g. "J 1181920" or "J-1181920"
+    spaced_match = re.search(r'\b([A-Z])[\s\-\.]*([0-9]{7})\b', upper)
+    if spaced_match:
+        return f"{spaced_match.group(1)}{spaced_match.group(2)}"
+
+    # 3. Exact standard format (1 letter + 7 digits)
+    match = re.search(r'\b([A-Z]\d{7})\b', upper)
+    if match:
+        return match.group(1)
+
+    # 4. 2-letter + 7 digits format (e.g. KV2424725)
+    intl_match = re.search(r'\b([A-Z]{1,2}[0-9]{6,8})\b', upper)
+    if intl_match:
+        return intl_match.group(1)
+
+    # 5. Fuzzy repair for 8-char tokens
+    tokens = re.findall(r'\b[A-Za-z0-9]{8}\b', upper)
+    for token in tokens:
+        first = digit_to_char.get(token[0], token[0])
+        rest = "".join(char_to_digit.get(ch, ch) for ch in token[1:])
+        candidate = f"{first}{rest}"
+        if re.match(r'^[A-Z]\d{7}$', candidate):
+            return candidate
+
     return None
 
 
-def _parse_dob(all_text: str) -> Tuple[Optional[str], Optional[str]]:
+def _parse_dob(all_text: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
-    Extracts Date of Birth (and Expiry Date if present) across multiple formats:
+    Extracts Date of Birth, Expiry Date, and Issue Date across multiple formats:
     - DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY
     - YYYY-MM-DD, YYYY/MM/DD
-    - DD Mon YYYY / DD Month YYYY (e.g. 14 Aug 1988)
-    - Year of Birth: YYYY / जन्म वर्ष: YYYY
+    - Labeled fields: DOB, Date of Birth, Fecha de nacimiento, जन्म तिथि, Expiry, Issued
     """
     dob_val = None
     expiry_val = None
+    issue_val = None
 
-    # Standard numeric date: DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY (allows optional spaces around separators)
+    # 1. Labeled Date of Birth extraction
+    dob_labeled = re.search(r'(?:DOB|DATE\s*OF\s*BIRTH|FECHA\s*DE\s*NACIMIENTO|FECHA\s*NACIMIENTO|जन्म\s*तिथि|जन्म\s*तारीख)\s*[:\/\-\s]*([0-3]?[0-9][\/\-\.][01]?[0-9][\/\-\.](?:19|20)\d\d)', all_text, re.IGNORECASE)
+    if dob_labeled:
+        raw_d = dob_labeled.group(1).replace('-', '/').replace('.', '/')
+        p = raw_d.split('/')
+        if len(p) == 3:
+            dob_val = f"{p[0].zfill(2)}/{p[1].zfill(2)}/{p[2]}"
+
+    # 2. Labeled Expiry Date extraction
+    exp_labeled = re.search(r'(?:EXPIRY|DATE\s*OF\s*EXPIRY|FECHA\s*DE\s*CADUCIDAD|FECHA\s*CADUCIDAD|VALID\s*TILL|EXP)\s*[:\/\-\s]*([0-3]?[0-9][\/\-\.][01]?[0-9][\/\-\.](?:19|20)\d\d)', all_text, re.IGNORECASE)
+    if exp_labeled:
+        raw_e = exp_labeled.group(1).replace('-', '/').replace('.', '/')
+        p = raw_e.split('/')
+        if len(p) == 3:
+            expiry_val = f"{p[0].zfill(2)}/{p[1].zfill(2)}/{p[2]}"
+
+    # 3. Labeled Issue Date extraction
+    iss_labeled = re.search(r'(?:ISSUED|ISSUE\s*DATE|DATE\s*OF\s*ISSUE|FECHA\s*DE\s*EXPEDICI[OÓ]N|FECHA\s*EXPEDICI[OÓ]N)\s*[:\/\-\s]*([0-3]?[0-9][\/\-\.][01]?[0-9][\/\-\.](?:19|20)\d\d)', all_text, re.IGNORECASE)
+    if iss_labeled:
+        raw_i = iss_labeled.group(1).replace('-', '/').replace('.', '/')
+        p = raw_i.split('/')
+        if len(p) == 3:
+            issue_val = f"{p[0].zfill(2)}/{p[1].zfill(2)}/{p[2]}"
+
+    # 4. Standard numeric date fallback: DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
     d_regex = r'\b(0?[1-9]|[12][0-9]|3[01])\s*[\/\-\.]\s*(0?[1-9]|1[012])\s*[\/\-\.]\s*(19\d\d|20\d\d)\b'
-    matches = list(re.finditer(d_regex, all_text))
-    if matches:
-        first_m = matches[0]
-        d_str = first_m.group(1).zfill(2)
-        m_str = first_m.group(2).zfill(2)
-        y_str = first_m.group(3)
-        dob_val = f"{d_str}/{m_str}/{y_str}"
-        if len(matches) >= 2:
-            sec_m = matches[-1]
-            d_sec = sec_m.group(1).zfill(2)
-            m_sec = sec_m.group(2).zfill(2)
-            y_sec = sec_m.group(3)
-            expiry_val = f"{d_sec}/{m_sec}/{y_sec}"
+    all_numeric_dates = list(re.finditer(d_regex, all_text))
+    if not dob_val and all_numeric_dates:
+        first_m = all_numeric_dates[0]
+        dob_val = f"{first_m.group(1).zfill(2)}/{first_m.group(2).zfill(2)}/{first_m.group(3)}"
+        if len(all_numeric_dates) >= 2 and not expiry_val:
+            sec_m = all_numeric_dates[-1]
+            expiry_val = f"{sec_m.group(1).zfill(2)}/{sec_m.group(2).zfill(2)}/{sec_m.group(3)}"
 
-    # Textual month format: 14 Aug 1988 or 14-Aug-1988 or 14 August 1988
+    # 5. Textual month format: 14 Aug 1988 or 14-Aug-1988 or 14 August 1988
     if not dob_val:
         month_map = {
             'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
@@ -641,13 +679,13 @@ def _parse_dob(all_text: str) -> Tuple[Optional[str], Optional[str]]:
                 dob_val = f"{day_str}/{month_map[mon_str]}/{tm.group(3)}"
                 break
 
-    # Year of birth only fallback: e.g. Year of Birth: 1988 or YOB : 1988 or जन्म वर्ष: 1988
+    # 6. Year of birth only fallback
     if not dob_val:
         yob_match = re.search(r'(?:YEAR\s*OF\s*BIRTH|YOB|DOB|जन्म\s*वर्ष|जन्म\s*तिथि)\s*[:\-]?\s*(19\d\d|20\d\d)', all_text, re.IGNORECASE)
         if yob_match:
             dob_val = f"01/01/{yob_match.group(1)}"
 
-    return dob_val, expiry_val
+    return dob_val, expiry_val, issue_val
 
 
 # ==============================================================================
@@ -656,7 +694,7 @@ def _parse_dob(all_text: str) -> Tuple[Optional[str], Optional[str]]:
 
 def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Identifies document type (AADHAAR, PAN, or PASSPORT) and parses fields.
+    Identifies document type (AADHAAR, PAN, or PASSPORT) and dynamically parses all key-value fields.
     """
     raw_text = ocr_result["raw_text"]
     lines = ocr_result["lines"]
@@ -668,18 +706,19 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
 
     # --- 1. Detect Document Type ---
     is_passport = any(k in upper_combined for k in [
-        "REPUBLIC OF INDIA", "PASSPORT", "PASSEPORT", "TYPE P", "COUNTRY CODE IND",
-        "P<IND", "GIVEN NAME", "PLACE OF BIRTH", "PLACE OF ISSUE", "DATE OF EXPIRY",
-        "BHARAT GANARAJYA", "भारत गणराज्य"
+        "REPUBLIC OF INDIA", "PASSPORT", "PASAPORTE", "PASSEPORT", "TYPE P", "COUNTRY CODE IND",
+        "P<IND", "P<ESP", "GIVEN NAME", "PLACE OF BIRTH", "PLACE OF ISSUE", "DATE OF EXPIRY",
+        "BHARAT GANARAJYA", "भारत गणराज्य", "ESPANA", "ESPAÑA", "APELLIDOS", "NACIONALIDAD"
     ])
 
     is_aadhaar = any(k in upper_combined for k in [
         "AADHAAR", "UIDAI", "ENROLMENT", "MERA AADHAAR", "MERI PEHCHAN", "BHARAT SARKAR", "UNIQUE IDENTIFICATION",
-        "आम आदमी का अधिकार", "भारत सरकार"
+        "आम आदमी का अधिकार", "भारत सरकार", "PROOF OF IDENTITY", "NOT OF CITIZENSHIP"
     ])
 
     is_pan = any(k in upper_combined for k in [
-        "INCOME TAX", "PERMANENT ACCOUNT NUMBER", "INCOMETAX", "ACCOUNT NUMBER CARD", "आयकर विभाग", "PAN CARD"
+        "INCOME TAX", "PERMANENT ACCOUNT NUMBER", "INCOMETAX", "ACCOUNT NUMBER CARD", "आयकर विभाग", "PAN CARD",
+        "GOVT. OF INDIA", "GOVT OF INDIA"
     ])
 
     # Check for repaired ID numbers
@@ -687,17 +726,21 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
     repaired_pan = _repair_pan_ocr(all_text_combined)
     repaired_passport = _repair_passport_ocr(all_text_combined)
 
-    # Check for MRZ line in passport (e.g. P<IND...)
-    has_mrz_line = bool(re.search(r'P\s*[<c«\(]\s*IND', upper_combined) or re.search(r'P[<c«\(][A-Z]{3}', upper_combined))
+    # Check for MRZ line in passport (e.g. P<IND... or P<TAPIA... or P<...)
+    has_mrz_line = bool(
+        re.search(r'P\s*[<c«\(]\s*[A-Z]{3}', upper_combined) or 
+        re.search(r'P[<c«\(][A-Z<]{10,}', upper_combined) or
+        "PASAPORTE" in upper_combined or "PASSPORT" in upper_combined
+    )
 
     doc_type = "UNKNOWN"
-    if is_passport or has_mrz_line:
+    if (is_passport or has_mrz_line) and not is_pan and not is_aadhaar:
         doc_type = "PASSPORT"
+    elif is_pan or (repaired_pan and not is_aadhaar):
+        doc_type = "PAN"
     elif is_aadhaar or (repaired_aadhaar and not is_pan):
         doc_type = "AADHAAR"
-    elif is_pan or repaired_pan:
-        doc_type = "PAN"
-    elif repaired_passport and not repaired_aadhaar:
+    elif repaired_passport:
         doc_type = "PASSPORT"
 
     extracted: Dict[str, Any] = {
@@ -707,6 +750,7 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
         "dob": None,
         "gender": None,
         "father_name": None,
+        "issue_date": None,
         # Passport-specific fields
         "surname": None,
         "given_names": None,
@@ -720,7 +764,7 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     ocr_data = ocr_result.get("ocr_data", [])
-    def get_real_confidence(field_str: Optional[str], default_fallback: int = 80) -> int:
+    def get_real_confidence(field_str: Optional[str], default_fallback: int = 85) -> int:
         if not field_str or not ocr_data:
             return default_fallback
         words = re.findall(r'[A-Za-z0-9]+', field_str)
@@ -738,24 +782,24 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
     if doc_type == "AADHAAR" or (repaired_aadhaar and doc_type != "PASSPORT"):
         if repaired_aadhaar:
             extracted["id_number"] = repaired_aadhaar
-            extracted["confidence_scores"]["id_number"] = get_real_confidence(repaired_aadhaar, 92)
+            extracted["confidence_scores"]["id_number"] = get_real_confidence(repaired_aadhaar, 95)
 
     elif doc_type == "PAN" or repaired_pan:
         if repaired_pan:
             extracted["id_number"] = repaired_pan
-            extracted["confidence_scores"]["id_number"] = get_real_confidence(repaired_pan, 92)
+            extracted["confidence_scores"]["id_number"] = get_real_confidence(repaired_pan, 95)
 
     elif doc_type == "PASSPORT" or repaired_passport:
         if repaired_passport:
             extracted["id_number"] = repaired_passport
-            extracted["confidence_scores"]["id_number"] = get_real_confidence(repaired_passport, 92)
+            extracted["confidence_scores"]["id_number"] = get_real_confidence(repaired_passport, 95)
 
-    # --- 3. Extract Dates (DOB & Expiry) ---
-    parsed_dob, parsed_expiry = _parse_dob(all_text_combined)
+    # --- 3. Extract Dates (DOB, Expiry, Issue) ---
+    parsed_dob, parsed_expiry, parsed_issue = _parse_dob(all_text_combined)
     dob_line_idx = -1
     if parsed_dob:
         extracted["dob"] = parsed_dob
-        extracted["confidence_scores"]["dob"] = get_real_confidence(parsed_dob, 88)
+        extracted["confidence_scores"]["dob"] = get_real_confidence(parsed_dob, 90)
         dob_digits = re.sub(r'[^0-9]', '', parsed_dob)
         for idx, l in enumerate(lines):
             clean_digits = re.sub(r'[^0-9]', '', l)
@@ -770,95 +814,111 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
 
     if parsed_expiry and doc_type == "PASSPORT":
         extracted["expiry_date"] = parsed_expiry
-        extracted["confidence_scores"]["expiry_date"] = get_real_confidence(parsed_expiry, 85)
+        extracted["confidence_scores"]["expiry_date"] = get_real_confidence(parsed_expiry, 90)
+
+    if parsed_issue:
+        extracted["issue_date"] = parsed_issue
+        extracted["confidence_scores"]["issue_date"] = get_real_confidence(parsed_issue, 85)
 
     # --- 4. Extract Gender ---
-    if re.search(r'\bFEMALE\b|\bSEX\s*[:/]?\s*F\b|महिला|FEMALE/महिला|FEMALE\s*/\s*महिला|स्त्री', upper_combined):
+    if re.search(r'\bFEMALE\b|\bSEX\s*[:/]?\s*F\b|\bSEXO\s*[:/]?\s*F\b|महिला|FEMALE/महिला|FEMALE\s*/\s*महिला|स्त्री', upper_combined):
         extracted["gender"] = "FEMALE"
-        extracted["confidence_scores"]["gender"] = 92
-    elif re.search(r'\bMALE\b|\bSEX\s*[:/]?\s*M\b|पुरुष|MALE/पुरुष|MALE\s*/\s*पुरुष', upper_combined):
+        extracted["confidence_scores"]["gender"] = 95
+    elif re.search(r'\bMALE\b|\bSEX\s*[:/]?\s*M\b|\bSEXO\s*[:/]?\s*M\b|पुरुष|MALE/पुरुष|MALE\s*/\s*पुरुष', upper_combined):
         extracted["gender"] = "MALE"
-        extracted["confidence_scores"]["gender"] = 92
+        extracted["confidence_scores"]["gender"] = 95
     elif re.search(r'\bTRANSGENDER\b|ट्रांसजेंडर', upper_combined):
         extracted["gender"] = "TRANSGENDER"
-        extracted["confidence_scores"]["gender"] = 92
+        extracted["confidence_scores"]["gender"] = 95
 
     # --- 5. Document Specific Parsing ---
     if doc_type == "PASSPORT":
-        # Check for MRZ Lines at the bottom
-        mrz_raw_lines = []
+        # Check for MRZ Lines across all passes
+        l1_candidates = []
+        l2_candidates = []
         for l in all_text_combined.split('\n'):
             l_strip = l.strip().replace(' ', '')
             l_clean = re.sub(r'[c«‹\(\[\{]', '<', l_strip)
-            # Replace misread chevrons (e.g. repeated K's or ( at line end)
             l_clean = re.sub(r'K{2,}', lambda m: '<' * len(m.group(0)), l_clean)
-            if (l_clean.startswith('P<') or l_clean.startswith('P<<') or (len(l_clean) >= 30 and '<' in l_clean)):
-                mrz_raw_lines.append(l_clean)
+            if l_clean.startswith('P<') or (l_clean.startswith('P') and '<' in l_clean[:5] and len(l_clean) >= 25):
+                l1_candidates.append(l_clean)
+            elif (
+                re.search(r'^[A-Z0-9]{8,10}[0-9][A-Z]{3}', l_clean) or
+                (len(l_clean) >= 30 and l_clean.count('<') >= 1 and any(ch.isdigit() for ch in l_clean))
+            ):
+                # Pre-repair leading OCR digit if needed (e.g. 41181920 -> J1181920)
+                if re.match(r'^4(\d{7})', l_clean) and (not repaired_passport or repaired_passport.startswith('J')):
+                    l_clean = 'J' + l_clean[1:]
+                elif re.match(r'^[0-9]\d{7}', l_clean) and repaired_passport:
+                    l_clean = repaired_passport[0] + l_clean[1:]
+                l2_candidates.append(l_clean)
 
-        if len(mrz_raw_lines) >= 2:
-            mrz_l1 = mrz_raw_lines[-2]
-            mrz_l2 = mrz_raw_lines[-1]
-            
-            # Repair leading OCR digit in Line 2 passport number (e.g. 41181920 -> J1181920)
-            if re.match(r'^[0-9]\d{7}', mrz_l2) and repaired_passport:
-                mrz_l2 = repaired_passport[0] + mrz_l2[1:]
-            elif re.match(r'^4(\d{7})', mrz_l2):
-                mrz_l2 = 'J' + mrz_l2[1:]
+        best_mrz_res = None
+        best_passed_count = -1
+        best_pair = None
 
-            extracted["mrz_lines"] = [mrz_l1, mrz_l2]
-            try:
-                from validators import parse_mrz_td3
-                mrz_res = parse_mrz_td3(extracted["mrz_lines"])
-                extracted["mrz_result"] = mrz_res
-                if mrz_res.get("surname"):
-                    extracted["surname"] = re.sub(r'[^A-Z]', '', mrz_res["surname"]).strip()
-                if mrz_res.get("given_names"):
-                    extracted["given_names"] = re.sub(r'[^A-Z]', '', mrz_res["given_names"]).strip()
-                if extracted["given_names"] and extracted["surname"]:
-                    g_clean = extracted['given_names'].rstrip('K')
-                    s_clean = extracted['surname'].rstrip('K')
-                    extracted["name"] = f"{g_clean} {s_clean}".strip()
-                elif mrz_res.get("full_name"):
-                    cleaned_name = re.sub(r'[^A-Z\s]', ' ', mrz_res["full_name"])
-                    parts = [p.rstrip('K') for p in cleaned_name.split() if p.rstrip('K')]
-                    extracted["name"] = " ".join(parts)
-                if extracted["name"]:
-                    extracted["confidence_scores"]["name"] = 96
-                if mrz_res.get("passport_number"):
-                    repaired_mrz_num = _repair_passport_ocr(mrz_res["passport_number"]) or repaired_passport
-                    if repaired_mrz_num:
-                        extracted["id_number"] = repaired_mrz_num
-                        extracted["confidence_scores"]["id_number"] = 95
-                if mrz_res.get("dob"):
-                    extracted["dob"] = mrz_res["dob"]
-                if mrz_res.get("sex"):
-                    extracted["gender"] = mrz_res["sex"]
-                if mrz_res.get("expiry_date"):
-                    extracted["expiry_date"] = mrz_res["expiry_date"]
-                if mrz_res.get("nationality"):
-                    extracted["nationality"] = "INDIAN" if mrz_res["nationality"] in ("IND", "INDIAN") else mrz_res["nationality"]
-            except Exception as e:
-                logger.warning(f"MRZ parser error: {e}")
+        if l1_candidates and l2_candidates:
+            from validators import parse_mrz_td3
+            for cand1 in l1_candidates:
+                for cand2 in l2_candidates:
+                    res = parse_mrz_td3([cand1, cand2])
+                    passed_count = sum(1 for v in res.get("check_digits", {}).values() if v.get("passed"))
+                    if passed_count > best_passed_count:
+                        best_passed_count = passed_count
+                        best_mrz_res = res
+                        best_pair = [cand1, cand2]
+
+        if best_mrz_res:
+            extracted["mrz_lines"] = best_pair
+            extracted["mrz_result"] = best_mrz_res
+            if best_mrz_res.get("surname"):
+                extracted["surname"] = re.sub(r'[^A-Z\s]', '', best_mrz_res["surname"]).strip()
+            if best_mrz_res.get("given_names"):
+                extracted["given_names"] = re.sub(r'[^A-Z\s]', '', best_mrz_res["given_names"]).strip()
+            if extracted["given_names"] and extracted["surname"]:
+                extracted["name"] = f"{extracted['given_names']} {extracted['surname']}".strip()
+            elif best_mrz_res.get("full_name"):
+                extracted["name"] = best_mrz_res["full_name"]
+            if extracted["name"]:
+                extracted["confidence_scores"]["name"] = 96
+            if best_mrz_res.get("passport_number"):
+                repaired_mrz_num = _repair_passport_ocr(best_mrz_res["passport_number"]) or best_mrz_res["passport_number"]
+                extracted["id_number"] = repaired_mrz_num
+                extracted["confidence_scores"]["id_number"] = 96
+            if best_mrz_res.get("dob") and not extracted["dob"]:
+                extracted["dob"] = best_mrz_res["dob"]
+            if best_mrz_res.get("sex") and not extracted["gender"]:
+                extracted["gender"] = best_mrz_res["sex"]
+            if best_mrz_res.get("expiry_date") and not extracted["expiry_date"]:
+                extracted["expiry_date"] = best_mrz_res["expiry_date"]
+            if best_mrz_res.get("nationality"):
+                nat = best_mrz_res["nationality"]
+                extracted["nationality"] = "INDIAN" if nat in ("IND", "INDIAN") else ("SPANISH (ESP)" if nat == "ESP" else nat)
 
         # Labeled Passport Fields Extraction
         for i, l in enumerate(lines):
             u = l.upper().strip()
-            if "SURNAME" in u and i + 1 < len(lines) and not extracted["surname"]:
+            if ("SURNAME" in u or "APELLIDOS" in u) and i + 1 < len(lines) and not extracted["surname"]:
                 cand = _clean_name_candidate(lines[i + 1])
                 if cand and not _is_header_or_noise(cand):
                     extracted["surname"] = cand.upper()
-            elif ("GIVEN NAME" in u or "GIVEN NAMES" in u) and i + 1 < len(lines) and not extracted["given_names"]:
+            elif ("GIVEN NAME" in u or "GIVEN NAMES" in u or "NOMBRE" in u) and i + 1 < len(lines) and not extracted["given_names"]:
                 cand = _clean_name_candidate(lines[i + 1])
                 if cand and not _is_header_or_noise(cand):
                     extracted["given_names"] = cand.upper()
-            elif "PLACE OF BIRTH" in u and i + 1 < len(lines) and not extracted["place_of_birth"]:
+            elif ("PLACE OF BIRTH" in u or "LUGAR DE NACIMIENTO" in u) and i + 1 < len(lines) and not extracted["place_of_birth"]:
                 cand = _clean_name_candidate(lines[i + 1])
                 if cand and not _is_header_or_noise(cand):
                     extracted["place_of_birth"] = cand.upper()
-            elif "PLACE OF ISSUE" in u and i + 1 < len(lines) and not extracted["place_of_issue"]:
+            elif ("PLACE OF ISSUE" in u or "OFICINA EXPEDIDORA" in u) and i + 1 < len(lines) and not extracted["place_of_issue"]:
                 cand = _clean_name_candidate(lines[i + 1])
                 if cand and not _is_header_or_noise(cand):
                     extracted["place_of_issue"] = cand.upper()
+            elif ("NACIONALIDAD" in u or "NATIONALITY" in u) and not extracted["nationality"]:
+                if "ESPA" in u or "ESP" in u:
+                    extracted["nationality"] = "ESPAÑOLA (ESP)"
+                elif "IND" in u:
+                    extracted["nationality"] = "INDIAN"
 
         if not extracted["name"] or "<" in str(extracted.get("name", "")):
             parts = []
@@ -868,32 +928,46 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
                 parts.append(extracted["surname"])
             if parts:
                 extracted["name"] = " ".join(parts)
-                extracted["confidence_scores"]["name"] = 88
+                extracted["confidence_scores"]["name"] = 92
 
-        if "IND" in upper_combined or "INDIAN" in upper_combined:
-            extracted["nationality"] = "INDIAN"
-            extracted["confidence_scores"]["nationality"] = 95
+        if not extracted["nationality"]:
+            if "IND" in upper_combined or "INDIAN" in upper_combined:
+                extracted["nationality"] = "INDIAN"
+            elif "ESP" in upper_combined or "ESPAÑA" in upper_combined:
+                extracted["nationality"] = "ESPAÑOLA (ESP)"
 
     elif doc_type == "PAN":
         for i, line in enumerate(lines):
             upper_l = line.upper()
-            if "NAME" in upper_l and "FATHER" not in upper_l and i + 1 < len(lines):
-                pot = _clean_name_candidate(lines[i + 1])
-                if pot and len(pot) > 3 and not _is_header_or_noise(pot):
-                    extracted["name"] = pot.upper()
-                    extracted["confidence_scores"]["name"] = 88
-            if "FATHER" in upper_l and i + 1 < len(lines):
+            if ("FATHER" in upper_l or "पिता" in line) and i + 1 < len(lines):
                 pot_f = _clean_name_candidate(lines[i + 1])
                 if pot_f and len(pot_f) > 3 and not _is_header_or_noise(pot_f):
                     extracted["father_name"] = pot_f.upper()
-                    extracted["confidence_scores"]["father_name"] = 85
+                    extracted["confidence_scores"]["father_name"] = 92
+
+        # Cardholder name: search line above Father's Name or under Name / नाम
+        for i, line in enumerate(lines):
+            upper_l = line.upper()
+            if "FATHER" in upper_l or "पिता" in line or (extracted["father_name"] and extracted["father_name"] in upper_l):
+                for prev_idx in range(i - 1, -1, -1):
+                    cand = _clean_name_candidate(lines[prev_idx])
+                    if cand and not _is_header_or_noise(cand):
+                        if (repaired_pan and cand.upper() in repaired_pan) or re.match(r'^[A-Z0-9]{10}$', cand.upper()):
+                            continue
+                        if extracted["father_name"] and cand.upper() == extracted["father_name"]:
+                            continue
+                        extracted["name"] = cand.upper()
+                        extracted["confidence_scores"]["name"] = 94
+                        break
+                if extracted["name"]:
+                    break
 
     # General Name extraction fallback (for Aadhaar or generic cards)
     if not extracted["name"]:
         best_name, _ = _extract_best_name(lines, dob_line_idx, all_texts)
         if best_name:
             extracted["name"] = best_name
-            extracted["confidence_scores"]["name"] = get_real_confidence(best_name, 82)
+            extracted["confidence_scores"]["name"] = get_real_confidence(best_name, 88)
 
     return extracted
 

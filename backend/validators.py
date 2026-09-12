@@ -211,34 +211,44 @@ def _icao_check_digit(data: str) -> int:
     return total % 10
 
 
-def validate_passport_number(passport_raw: str) -> Dict[str, Any]:
+def validate_passport_number(passport_raw: str, country_code: str = "IND") -> Dict[str, Any]:
     """
-    Validates Indian Passport Number format:
-    - 1 uppercase letter (series) + 7 digits
-    - Example: J8369854, K1234567
-    - No mathematical checksum exists for the passport number alone;
-      validation is syntax-based. MRZ check digit is computed separately.
+    Validates Passport Number format:
+    - Indian Passport: 1 uppercase letter (series) + 7 digits (e.g., J8369854, J1181920)
+    - International / ICAO TD3: 7-9 alphanumeric characters (e.g., KV2424725)
     """
     cleaned = re.sub(r'[\s\-]', '', str(passport_raw).strip()).upper()
 
-    passport_regex = r'^[A-Z]\d{7}$'
-    if not re.match(passport_regex, cleaned):
+    indian_regex = r'^[A-Z]\d{7}$'
+    intl_regex = r'^[A-Z0-9]{7,10}$'
+
+    if re.match(indian_regex, cleaned):
+        series_letter = cleaned[0]
+        return {
+            "is_valid": True,
+            "id_number": cleaned,
+            "raw_number": cleaned,
+            "checksum_passed": True,
+            "series": series_letter,
+            "country": "IND",
+            "details": f"Valid Indian Passport syntax (Series {series_letter}). Format: {series_letter}NNNNNNN."
+        }
+    elif re.match(intl_regex, cleaned):
+        return {
+            "is_valid": True,
+            "id_number": cleaned,
+            "raw_number": cleaned,
+            "checksum_passed": True,
+            "country": country_code or "INTL",
+            "details": f"Valid ICAO 9303 TD3 Passport identifier format ({cleaned})."
+        }
+    else:
         return {
             "is_valid": False,
             "id_number": cleaned,
-            "error": f"Invalid Passport format '{cleaned}'. Must be 1 letter + 7 digits (e.g., J8369854).",
+            "error": f"Invalid Passport format '{cleaned}'. Must be 7-9 alphanumeric characters.",
             "checksum_passed": False
         }
-
-    series_letter = cleaned[0]
-    return {
-        "is_valid": True,
-        "id_number": cleaned,
-        "raw_number": cleaned,
-        "checksum_passed": True,  # Syntax validation passed
-        "series": series_letter,
-        "details": f"Valid Indian Passport syntax (Series {series_letter}). Format: {series_letter}NNNNNNN."
-    }
 
 
 def parse_mrz_td3(mrz_lines: List[str]) -> Dict[str, Any]:
@@ -303,18 +313,46 @@ def parse_mrz_td3(mrz_lines: List[str]) -> Dict[str, Any]:
     if doc_type != 'P':
         result["errors"].append(f"Document type '{doc_type}' is not a passport (expected 'P').")
 
-    issuing_country = line1[2:5].replace('<', '')
+    # If positions 2:5 are standard 3-letter country code
+    raw_country = line1[2:5].replace('<', '')
+    if len(raw_country) == 3 and raw_country.isalpha():
+        issuing_country = raw_country
+        name_field = line1[5:44]
+    else:
+        # Country code in line 2 or name starts at position 2
+        issuing_country = line2[10:13].replace('<', '') if len(line2) > 13 else ""
+        name_field = line1[2:44] if line1.startswith('P<') else line1[1:44]
+
     result["issuing_country"] = issuing_country
 
-    # Parse name: SURNAME<<GIVEN<NAMES<<<
-    name_field = line1[5:44]
-    name_parts = name_field.split('<<')
-    surname = name_parts[0].replace('<', ' ').strip() if len(name_parts) > 0 else ""
-    given_names = name_parts[1].replace('<', ' ').strip() if len(name_parts) > 1 else ""
-    
+    # Parse name: SURNAME<<GIVEN<NAMES<<< or P<SURNAME<GIVEN<NAMES
+    # Clean trailing noise/misread chevrons
+    clean_line1 = re.sub(r'[K\<\(\s]+$', '', line1)
+    if clean_line1.startswith('P<'):
+        raw_parts = [p for p in clean_line1[2:].split('<') if p]
+    elif clean_line1.startswith('P'):
+        raw_parts = [p for p in clean_line1[1:].split('<') if p]
+    else:
+        raw_parts = [p for p in clean_line1.split('<') if p]
+
+    # If first part is 3-letter country code, shift
+    if raw_parts and len(raw_parts[0]) == 3 and raw_parts[0].isalpha() and len(raw_parts) > 1:
+        issuing_country = raw_parts[0]
+        raw_parts = raw_parts[1:]
+
+    surname = ""
+    given_names = ""
+    if len(raw_parts) == 1:
+        surname = raw_parts[0]
+    elif len(raw_parts) >= 2:
+        surname = raw_parts[0]
+        valid_given = [p for p in raw_parts[1:] if len(p) > 1 or p.isalpha()]
+        given_names = " ".join(valid_given)
+
+    result["issuing_country"] = issuing_country
     result["surname"] = surname
     result["given_names"] = given_names
-    result["full_name"] = f"{given_names} {surname}".strip()
+    result["full_name"] = f"{given_names} {surname}".strip() if (given_names or surname) else ""
 
     # --- Parse Line 2 ---
     passport_num = line2[0:9].replace('<', '')

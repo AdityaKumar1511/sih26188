@@ -471,8 +471,38 @@ async def extract_and_validate(
             confidence=confidences.get("father_name", 80)
         ))
 
+    # PAN-specific fields
+    if doc_type == "PAN" and id_number and len(id_number) >= 4:
+        from validators import PAN_HOLDER_TYPES
+        entity_code = id_number[3].upper()
+        entity_name = PAN_HOLDER_TYPES.get(entity_code, "Individual / Person")
+        extracted_items.append(ExtractedFieldItem(
+            field_name="Entity Category",
+            value=entity_name,
+            status="verified",
+            confidence=95
+        ))
+
     # Passport-specific fields
     if doc_type == "PASSPORT":
+        surname = parsed_fields.get("surname")
+        if surname and surname != name:
+            extracted_items.append(ExtractedFieldItem(
+                field_name="Surname",
+                value=surname,
+                status="verified",
+                confidence=confidences.get("surname", 90)
+            ))
+
+        given_names = parsed_fields.get("given_names")
+        if given_names and given_names != name:
+            extracted_items.append(ExtractedFieldItem(
+                field_name="Given Names",
+                value=given_names,
+                status="verified",
+                confidence=confidences.get("given_names", 90)
+            ))
+
         place_of_birth = parsed_fields.get("place_of_birth")
         if place_of_birth:
             extracted_items.append(ExtractedFieldItem(
@@ -499,6 +529,16 @@ async def extract_and_validate(
                 status="verified",
                 confidence=confidences.get("nationality", 90)
             ))
+
+    # Issue Date (if available on card or passport)
+    issue_date = parsed_fields.get("issue_date")
+    if issue_date:
+        extracted_items.append(ExtractedFieldItem(
+            field_name="Date of Issue",
+            value=issue_date,
+            status="verified",
+            confidence=confidences.get("issue_date", 85)
+        ))
 
     if not extracted_items:
         extracted_items.append(ExtractedFieldItem(
