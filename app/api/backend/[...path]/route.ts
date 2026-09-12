@@ -11,6 +11,7 @@ async function handleProxy(req: NextRequest, { params }: { params: { path: strin
   const base = BACKEND_URL.replace(/\/+$/, '');
   const targetUrl = base + '/' + path + search;
 
+  try {
     const headers = new Headers();
     const contentType = req.headers.get('content-type');
     if (contentType) {
