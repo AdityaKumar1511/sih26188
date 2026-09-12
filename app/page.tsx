@@ -343,9 +343,6 @@ const SAMPLE_PRESETS: SamplePreset[] = [
 // ============================================================================
 
 function getApiBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, '');
-  }
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     if (host === 'localhost' || host === '127.0.0.1') {
@@ -375,19 +372,31 @@ async function analyzeDocumentWithBiometrics(
 
   const baseUrl = getApiBaseUrl();
 
-  try {
-    const response = await fetch(`${baseUrl}/extract-and-validate`, {
-      method: 'POST',
-      body: formData,
-      signal,
-    });
+  let response: Response | null = null;
+  let lastError: any = null;
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || err.message || `HTTP ${response.status}: Failed to process document on server`);
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      response = await fetch(`${baseUrl}/extract-and-validate`, {
+        method: 'POST',
+        body: formData,
+        signal,
+      });
+      if (response && response.ok) break;
+    } catch (err) {
+      lastError = err;
+      if (attempt === 1) {
+        await new Promise((r) => setTimeout(r, 1200));
+      }
     }
+  }
 
-    const data = await response.json();
+  if (!response || !response.ok) {
+    const err = response ? await response.json().catch(() => ({})) : {};
+    throw new Error(err.detail || err.message || (lastError?.message ? `Connection error: ${lastError.message}` : 'Screening API error'));
+  }
+
+  const data = await response.json();
 
     let biometricRes: BiometricResult | undefined = undefined;
     if (data.biometric_verification) {
@@ -505,10 +514,6 @@ async function analyzeDocumentWithBiometrics(
       biometricResult: biometricRes,
       blockchainAnchor: blockchainAnchorRes
     };
-  } catch (error: any) {
-    console.error('Backend connection failed:', error);
-    throw new Error(error.message || 'Could not connect to FastAPI screening engine at ' + baseUrl);
-  }
 }
 
 async function exportPdfAuditReport(screeningResult: ScreeningResult) {

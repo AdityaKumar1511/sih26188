@@ -40,20 +40,45 @@ app = FastAPI(
     version="1.1.0"
 )
 
-# Enable robust CORS for Next.js frontend and Vercel deployments
+from fastapi import Request
+
+# Enable 100% universal CORS for all origins, subdomains, and preflight requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://sih26188.vercel.app",
-        "https://sih26188-jiwn.vercel.app",
-    ],
-    allow_origin_regex=r"https://.*\.vercel\.app",
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def universal_cors_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            }
+        )
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        logger.error(f"Unhandled server error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Server processing error: {str(e)}"},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "*",
+                "Access-Control-Allow-Headers": "*",
+            }
+        )
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 
 
 def _run_ocr_and_parsing(image_bytes: bytes) -> Tuple[Dict[str, Any], Dict[str, Any]]:
