@@ -141,9 +141,9 @@ def detect_face(img_bgr: np.ndarray) -> Optional[Dict[str, Any]]:
                     fw = min(w - fx, fw)
                     fh = min(h - fy, fh)
 
-                    # Add margin for portrait crop
-                    margin_x = int(fw * 0.20)
-                    margin_y = int(fh * 0.25)
+                    # Tight facial crop isolating only the face extracted by YuNet
+                    margin_x = int(fw * 0.08)
+                    margin_y = int(fh * 0.08)
                     crop_x1 = max(0, fx - margin_x)
                     crop_y1 = max(0, fy - margin_y)
                     crop_x2 = min(w, fx + fw + margin_x)

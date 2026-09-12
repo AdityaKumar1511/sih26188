@@ -827,10 +827,10 @@ async function analyzeDocumentWithBiometrics(
   const baseUrls = getCandidateBaseUrls();
   let response: Response | null = null;
 
-  // Race all available backends concurrently with strict 3.5s timeout for guaranteed <4s turnaround
+  // Race all available backends with 25s timeout for complete 5-stage OpenCV + OCR + YuNet execution
   const fetchPromises = baseUrls.map(async (baseUrl) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3500);
+    const timer = setTimeout(() => controller.abort(), 25000);
     try {
       const res = await fetch(`${baseUrl}/extract-and-validate`, {
         method: 'POST',
