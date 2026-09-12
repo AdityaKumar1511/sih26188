@@ -377,16 +377,19 @@ async function analyzeDocumentWithBiometrics(
   for (const baseUrl of baseUrls) {
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        response = await fetch(`${baseUrl}/extract-and-validate`, {
+        const res = await fetch(`${baseUrl}/extract-and-validate`, {
           method: 'POST',
           body: formData,
           signal,
         });
-        if (response && response.ok) break;
+        if (res && res.ok) {
+          response = res;
+          break;
+        }
       } catch (err) {
         lastError = err;
         if (attempt === 1) {
-          await new Promise((r) => setTimeout(r, 1000));
+          await new Promise((r) => setTimeout(r, 600));
         }
       }
     }

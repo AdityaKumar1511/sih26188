@@ -11,10 +11,15 @@ async function handleProxy(req: NextRequest, { params }: { params: { path: strin
   const base = BACKEND_URL.replace(/\/+$/, '');
   const targetUrl = base + '/' + path + search;
 
-  try {
-    const headers = new Headers(req.headers);
-    headers.delete('host');
-    headers.delete('connection');
+    const headers = new Headers();
+    const contentType = req.headers.get('content-type');
+    if (contentType) {
+      headers.set('content-type', contentType);
+    }
+    const accept = req.headers.get('accept');
+    if (accept) {
+      headers.set('accept', accept);
+    }
 
     const body = req.method !== 'GET' && req.method !== 'HEAD' ? await req.arrayBuffer() : undefined;
 
