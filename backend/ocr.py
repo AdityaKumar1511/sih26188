@@ -101,23 +101,13 @@ def preprocess_image(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
 
     # 2. Grayscale & CLAHE (Contrast-Limited Adaptive Histogram Equalization)
     gray = cv2.cvtColor(open_cv_image, cv2.COLOR_BGR2GRAY)
-    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     clahe_img = clahe.apply(gray)
     results.append(("clahe", Image.fromarray(clahe_img)))
 
-    # 3. Bilateral Filter Denoised + CLAHE (Sharp text contours without background noise)
-    denoised = cv2.bilateralFilter(clahe_img, 9, 75, 75)
-    results.append(("denoised", Image.fromarray(denoised)))
-
-    # 4. Adaptive Threshold (for crisp text contours)
-    thresh = cv2.adaptiveThreshold(
-        clahe_img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 8
-    )
-    results.append(("threshold", Image.fromarray(thresh)))
-
-    # 5. Otsu thresholding (good for MRZ and high-contrast lines)
-    _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    results.append(("otsu", Image.fromarray(otsu)))
+    # 3. Fast Otsu thresholding (for MRZ and high-contrast lines)
+    _, otsu = cv2.threshold(clahe_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    results.append(("threshold", Image.fromarray(otsu)))
 
     return results
 

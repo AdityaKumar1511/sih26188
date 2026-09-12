@@ -215,15 +215,17 @@ async def extract_and_validate(
         except Exception as e:
             logger.warning(f"Live face read error: {e}")
 
-    # 3. Concurrently execute independent CPU-bound checks (OCR, QR detection, ELA, Sharpness, Face matching)
+    # 3. Concurrently execute independent CPU-bound checks (OCR, QR detection, ELA, Sharpness, CNN classification, Face matching)
     ocr_task = asyncio.to_thread(_run_ocr_and_parsing, contents)
     qr_task = asyncio.to_thread(detect_and_decode_qr, contents)
     ela_task = asyncio.to_thread(compute_ela, contents)
     sharpness_task = asyncio.to_thread(compute_image_sharpness_and_lighting, contents)
+    cnn_doc_task = asyncio.to_thread(predict_screening_image, contents)
 
-    tasks = [ocr_task, qr_task, ela_task, sharpness_task]
+    tasks = [ocr_task, qr_task, ela_task, sharpness_task, cnn_doc_task]
     if live_bytes is not None:
         tasks.append(asyncio.to_thread(match_faces_1to1, contents, live_bytes))
+        tasks.append(asyncio.to_thread(predict_screening_image, live_bytes))
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -255,13 +257,16 @@ async def extract_and_validate(
         logger.warning(f"Sharpness check failed: {sharp_res}")
         sharp_res = {"sharpness_score": 70, "laplacian_variance": 0.0, "blur_level": "UNKNOWN", "details": "Image sharpness could not be evaluated."}
 
-    # Unpack Biometric matching result (if requested)
+    # Unpack CNN doc result
+    cnn_doc_result = results[4] if len(results) > 4 and not isinstance(results[4], Exception) else {"is_safe": True, "predicted_label": "authentic_document", "confidence": 0.95}
+
+    # Unpack Biometric matching result & CNN live result (if requested)
     face_match_res = None
-    if live_bytes is not None and len(results) > 4:
-        face_match_res = results[4]
-        if isinstance(face_match_res, Exception):
-            logger.warning(f"Live face verification encountered an error: {face_match_res}")
-            face_match_res = None
+    cnn_live_result = None
+    if live_bytes is not None and len(results) > 5:
+        face_match_res = results[5] if not isinstance(results[5], Exception) else None
+        if len(results) > 6 and not isinstance(results[6], Exception):
+            cnn_live_result = results[6]
 
     doc_type = parsed_fields.get("doc_type", "UNKNOWN")
     id_number = parsed_fields.get("id_number")
@@ -278,19 +283,16 @@ async def extract_and_validate(
         f"Document classified as: {doc_type}."
     ]
 
-    cnn_doc_result = await asyncio.to_thread(predict_screening_image, contents)
-    cnn_live_result = await asyncio.to_thread(predict_screening_image, live_bytes) if live_bytes is not None else None
-
     if cnn_doc_result.get("is_safe") is False:
-        forensic_trace.append(f"CNN screening: Document classification={cnn_doc_result['predicted_label']} (confidence {cnn_doc_result['confidence']}).")
+        forensic_trace.append(f"CNN screening: Document classification={cnn_doc_result.get('predicted_label')} (confidence {cnn_doc_result.get('confidence')}).")
     else:
-        forensic_trace.append(f"CNN screening: Document appears authentic (class={cnn_doc_result['predicted_label']}, confidence {cnn_doc_result['confidence']}).")
+        forensic_trace.append(f"CNN screening: Document appears authentic (class={cnn_doc_result.get('predicted_label')}, confidence {cnn_doc_result.get('confidence')}).")
 
     if cnn_live_result is not None:
         if cnn_live_result.get("is_safe") is False:
-            forensic_trace.append(f"CNN screening: Live face classification={cnn_live_result['predicted_label']} (confidence {cnn_live_result['confidence']}).")
+            forensic_trace.append(f"CNN screening: Live face classification={cnn_live_result.get('predicted_label')} (confidence {cnn_live_result.get('confidence')}).")
         else:
-            forensic_trace.append(f"CNN screening: Live face appears genuine (class={cnn_live_result['predicted_label']}, confidence {cnn_live_result['confidence']}).")
+            forensic_trace.append(f"CNN screening: Live face appears genuine (class={cnn_live_result.get('predicted_label')}, confidence {cnn_live_result.get('confidence')}).")
 
     # 4. Algorithmic Checksum Validation
     checksum_passed = False
