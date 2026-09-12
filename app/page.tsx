@@ -366,7 +366,7 @@ function getApiBaseUrl(): string {
       return '/api/backend';
     }
   }
-  return 'https://sih26188-naq6.onrender.com';
+  return 'https://sih-sentinel-backend.onrender.com';
 }
 
 async function analyzeDocumentWithBiometrics(
