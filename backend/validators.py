@@ -346,8 +346,29 @@ def parse_mrz_td3(mrz_lines: List[str]) -> Dict[str, Any]:
         surname = raw_parts[0]
     elif len(raw_parts) >= 2:
         surname = raw_parts[0]
-        valid_given = [p for p in raw_parts[1:] if len(p) > 1 or p.isalpha()]
-        given_names = " ".join(valid_given)
+        # Filter trailing single stray letter noise from <<<<<S
+        valid_given = []
+        for idx, p in enumerate(raw_parts[1:]):
+            p_clean = re.sub(r'[^A-Z]', '', p)
+            # Remove trailing 'K' which is commonly misread chevrons '<' in OCR
+            if p_clean.endswith('K') and len(p_clean) > 3:
+                p_clean = p_clean[:-1]
+            # If a trailing single letter occurred after multiple chevrons, it's OCR noise
+            if idx == len(raw_parts[1:]) - 1 and len(p_clean) == 1 and (line1.endswith(p_clean) or '<' in line1[-10:]):
+                continue
+            if p_clean:
+                valid_given.append(p_clean)
+        # Rejoin broken name tokens (e.g., 'DASE' + 'C' -> 'DASEC')
+        rejoined = []
+        i = 0
+        while i < len(valid_given):
+            if i + 1 < len(valid_given) and len(valid_given[i+1]) == 1 and len(valid_given[i]) >= 3:
+                rejoined.append(valid_given[i] + valid_given[i+1])
+                i += 2
+            else:
+                rejoined.append(valid_given[i])
+                i += 1
+        given_names = " ".join(rejoined)
 
     result["issuing_country"] = issuing_country
     result["surname"] = surname

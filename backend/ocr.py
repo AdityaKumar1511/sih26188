@@ -863,8 +863,13 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
                 for cand2 in l2_candidates:
                     res = parse_mrz_td3([cand1, cand2])
                     passed_count = sum(1 for v in res.get("check_digits", {}).values() if v.get("passed"))
-                    if passed_count > best_passed_count:
-                        best_passed_count = passed_count
+                    # Score Line 1 quality: reward legitimate surnames and given names
+                    s_len = len(res.get("surname") or "")
+                    g_len = len(res.get("given_names") or "")
+                    lexical_score = (s_len if s_len >= 3 else 0) + (g_len if g_len >= 3 else 0)
+                    total_score = passed_count * 100 + lexical_score
+                    if total_score > best_passed_count:
+                        best_passed_count = total_score
                         best_mrz_res = res
                         best_pair = [cand1, cand2]
 

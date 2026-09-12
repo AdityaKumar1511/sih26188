@@ -387,11 +387,7 @@ async def extract_and_validate(
         if db_result.get("name_matched"):
             forensic_trace.append("Extracted name matches registered record.")
         elif registered_name:
-            # If OCR returned garbled text (like Hindi OCR transliteration artifacts), reconcile with registered name
-            forensic_trace.append(f"OCR Name '{name}' reconciled with official registry record '{registered_name}'.")
-            name = registered_name
-            db_result["name_matched"] = True
-            confidences["name"] = 96
+            forensic_trace.append(f"Official registry record on file: '{registered_name}'.")
         elif db_result.get("name_matched") is False:
             forensic_trace.append("WARNING: Extracted name does not match registered name in database.")
     else:
