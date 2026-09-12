@@ -76,6 +76,17 @@ try:
             "address": "De-listed Address",
             "issuer": "UIDAI",
             "status": "REVOKED"
+        },
+        {
+            "doc_type": "AADHAAR",
+            "id_number": "266348132551",
+            "full_name": "YUVRAJ ATRI",
+            "father_name": None,
+            "dob": "2008-03-04",
+            "gender": "MALE",
+            "address": None,
+            "issuer": "UIDAI",
+            "status": "ACTIVE"
         }
     ]
 
