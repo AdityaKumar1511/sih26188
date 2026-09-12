@@ -343,7 +343,16 @@ const SAMPLE_PRESETS: SamplePreset[] = [
 // ============================================================================
 
 function getApiBaseUrl(): string {
-  return '/api/backend';
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, '');
+  }
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://127.0.0.1:8000';
+    }
+  }
+  return 'https://sih-sentinel-backend.onrender.com';
 }
 
 async function analyzeDocumentWithBiometrics(
@@ -375,7 +384,7 @@ async function analyzeDocumentWithBiometrics(
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      throw new Error(err.detail || 'Screening API error');
+      throw new Error(err.detail || err.message || `HTTP ${response.status}: Failed to process document on server`);
     }
 
     const data = await response.json();
