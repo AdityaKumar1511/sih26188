@@ -89,17 +89,17 @@ def preprocess_image(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
     open_cv_image = np.array(pil_image)
     open_cv_image = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2BGR)
 
-    # 1. Resize if image is too small or excessively large
+    # 1. Resize if image is too small or excessively large (optimal 1000-1200px)
     h, w = open_cv_image.shape[:2]
-    if w < 1200:
-        scale_factor = 1200 / max(w, 1)
+    if w < 900:
+        scale_factor = 1000 / max(w, 1)
         open_cv_image = cv2.resize(
             open_cv_image,
             (int(w * scale_factor), int(h * scale_factor)),
             interpolation=cv2.INTER_CUBIC
         )
-    elif w > 3200:
-        scale_factor = 2400 / w
+    elif w > 1600:
+        scale_factor = 1200 / w
         open_cv_image = cv2.resize(
             open_cv_image,
             (int(w * scale_factor), int(h * scale_factor)),
