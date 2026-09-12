@@ -588,7 +588,7 @@ async function exportPdfAuditReport(screeningResult: ScreeningResult) {
 
 export default function DocumentScreeningApp() {
   const [appState, setAppState] = useState<AppState>('upload');
-  const [appMode, setAppMode] = useState<AppMode>('standard');
+  const [appMode, setAppMode] = useState<AppMode>('egate_kiosk');
   
   // Document state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
