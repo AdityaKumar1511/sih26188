@@ -342,14 +342,14 @@ const SAMPLE_PRESETS: SamplePreset[] = [
 // LIVE FASTAPI BACKEND INTEGRATION & PDF EXPORT
 // ============================================================================
 
-function getApiBaseUrl(): string {
+function getCandidateBaseUrls(): string[] {
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     if (host === 'localhost' || host === '127.0.0.1') {
-      return 'http://127.0.0.1:8000';
+      return ['http://127.0.0.1:8000', '/api/backend', 'https://sih-sentinel-backend.onrender.com'];
     }
   }
-  return 'https://sih-sentinel-backend.onrender.com';
+  return ['/api/backend', 'https://sih-sentinel-backend.onrender.com'];
 }
 
 async function analyzeDocumentWithBiometrics(
@@ -370,25 +370,27 @@ async function analyzeDocumentWithBiometrics(
     formData.append('live_face', liveFaceInput);
   }
 
-  const baseUrl = getApiBaseUrl();
-
+  const baseUrls = getCandidateBaseUrls();
   let response: Response | null = null;
   let lastError: any = null;
 
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      response = await fetch(`${baseUrl}/extract-and-validate`, {
-        method: 'POST',
-        body: formData,
-        signal,
-      });
-      if (response && response.ok) break;
-    } catch (err) {
-      lastError = err;
-      if (attempt === 1) {
-        await new Promise((r) => setTimeout(r, 1200));
+  for (const baseUrl of baseUrls) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        response = await fetch(`${baseUrl}/extract-and-validate`, {
+          method: 'POST',
+          body: formData,
+          signal,
+        });
+        if (response && response.ok) break;
+      } catch (err) {
+        lastError = err;
+        if (attempt === 1) {
+          await new Promise((r) => setTimeout(r, 1000));
+        }
       }
     }
+    if (response && response.ok) break;
   }
 
   if (!response || !response.ok) {
@@ -517,51 +519,61 @@ async function analyzeDocumentWithBiometrics(
 }
 
 async function exportPdfAuditReport(screeningResult: ScreeningResult) {
-  const baseUrl = getApiBaseUrl();
+  const baseUrls = getCandidateBaseUrls();
+  const payload = {
+    document_type: screeningResult.documentType,
+    verdict: screeningResult.verdict,
+    authenticity_score: screeningResult.authenticityScore,
+    biometric_verification: screeningResult.biometricResult ? {
+      match_score: screeningResult.biometricResult.matchScore,
+      verdict: screeningResult.biometricResult.verdict,
+      liveness_status: screeningResult.biometricResult.livenessStatus,
+      verdict_description: screeningResult.biometricResult.verdictDescription
+    } : null,
+    blockchain_anchor: screeningResult.blockchainAnchor ? {
+      tx_hash: screeningResult.blockchainAnchor.txHash,
+      block_number: screeningResult.blockchainAnchor.blockNumber,
+      verdict_hash: screeningResult.blockchainAnchor.verdictHash,
+      network: screeningResult.blockchainAnchor.network,
+      explorer_url: screeningResult.blockchainAnchor.explorerUrl,
+      timestamp_iso: screeningResult.blockchainAnchor.timestampIso,
+      status: screeningResult.blockchainAnchor.status
+    } : null,
+    extracted_fields: screeningResult.extractedFields.map(f => ({
+      field_name: f.fieldName,
+      value: f.value,
+      status: f.status,
+      confidence: f.confidence
+    })),
+    validation_checks: screeningResult.validationChecks.map(c => ({
+      name: c.name,
+      category: c.category,
+      status: c.status,
+      details: c.details,
+      score: c.score
+    })),
+    forensic_trace: screeningResult.forensicTrace
+  };
+
+  let response: Response | null = null;
+  let lastError: any = null;
+
+  for (const baseUrl of baseUrls) {
+    try {
+      response = await fetch(`${baseUrl}/generate-audit-report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (response && response.ok) break;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
   try {
-    const payload = {
-      document_type: screeningResult.documentType,
-      verdict: screeningResult.verdict,
-      authenticity_score: screeningResult.authenticityScore,
-      biometric_verification: screeningResult.biometricResult ? {
-        match_score: screeningResult.biometricResult.matchScore,
-        verdict: screeningResult.biometricResult.verdict,
-        liveness_status: screeningResult.biometricResult.livenessStatus,
-        verdict_description: screeningResult.biometricResult.verdictDescription
-      } : null,
-      blockchain_anchor: screeningResult.blockchainAnchor ? {
-        tx_hash: screeningResult.blockchainAnchor.txHash,
-        block_number: screeningResult.blockchainAnchor.blockNumber,
-        verdict_hash: screeningResult.blockchainAnchor.verdictHash,
-        network: screeningResult.blockchainAnchor.network,
-        explorer_url: screeningResult.blockchainAnchor.explorerUrl,
-        timestamp_iso: screeningResult.blockchainAnchor.timestampIso,
-        status: screeningResult.blockchainAnchor.status
-      } : null,
-      extracted_fields: screeningResult.extractedFields.map(f => ({
-        field_name: f.fieldName,
-        value: f.value,
-        status: f.status,
-        confidence: f.confidence
-      })),
-      validation_checks: screeningResult.validationChecks.map(c => ({
-        name: c.name,
-        category: c.category,
-        status: c.status,
-        details: c.details,
-        score: c.score
-      })),
-      forensic_trace: screeningResult.forensicTrace
-    };
-
-    const response = await fetch(`${baseUrl}/generate-audit-report`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to generate PDF report from server');
+    if (!response || !response.ok) {
+      throw new Error(lastError?.message || 'Failed to generate PDF report from server');
     }
 
     const blob = await response.blob();
@@ -632,23 +644,24 @@ export default function DocumentScreeningApp() {
   const handleVerifyOnChain = async (identifier: string) => {
     setIsVerifyingOnChain(true);
     setChainVerificationResult(null);
-    const baseUrl = getApiBaseUrl();
-    try {
-      const res = await fetch(`${baseUrl}/verify-blockchain-anchor/${identifier}`);
-      if (res.ok) {
-        const json = await res.json();
-        setChainVerificationResult(json);
-      } else {
-        setChainVerificationResult({
-          verified: true,
-          searched_identifier: identifier,
-          chain_valid: true,
-          status: 'CRYPTOGRAPHICALLY_VERIFIED',
-          network: 'Polygon PoS (Amoy Testnet - EVM)'
-        });
+    const baseUrls = getCandidateBaseUrls();
+    let json: any = null;
+
+    for (const baseUrl of baseUrls) {
+      try {
+        const res = await fetch(`${baseUrl}/verify-blockchain-anchor/${identifier}`);
+        if (res.ok) {
+          json = await res.json();
+          break;
+        }
+      } catch {
+        // try next candidate
       }
-    } catch {
-      // Offline fallback verification
+    }
+
+    if (json) {
+      setChainVerificationResult(json);
+    } else {
       setChainVerificationResult({
         verified: true,
         searched_identifier: identifier,
@@ -657,28 +670,32 @@ export default function DocumentScreeningApp() {
         network: 'Polygon PoS (Amoy Testnet - EVM)',
         note: 'Mathematical hash integrity confirmed locally via Merkle proof.'
       });
-    } finally {
-      setIsVerifyingOnChain(false);
     }
+    setIsVerifyingOnChain(false);
   };
 
   const handleFetchChainBlocks = async () => {
     setIsChainModalOpen(true);
     setIsLoadingBlocks(true);
-    const baseUrl = getApiBaseUrl();
-    try {
-      const res = await fetch(`${baseUrl}/blockchain-ledger-blocks?limit=10`);
-      if (res.ok) {
-        const json = await res.json();
-        setChainBlocks(json.recent_blocks || []);
-      } else {
-        setChainBlocks([]);
+    const baseUrls = getCandidateBaseUrls();
+    let blocks: any[] = [];
+
+    for (const baseUrl of baseUrls) {
+      try {
+        const res = await fetch(`${baseUrl}/blockchain-ledger-blocks?limit=10`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.recent_blocks) {
+            blocks = json.recent_blocks;
+            break;
+          }
+        }
+      } catch {
+        // try next candidate
       }
-    } catch {
-      setChainBlocks([]);
-    } finally {
-      setIsLoadingBlocks(false);
     }
+    setChainBlocks(blocks);
+    setIsLoadingBlocks(false);
   };
 
   const processingSteps = appMode === 'standard' ? [
