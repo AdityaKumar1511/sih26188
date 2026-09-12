@@ -352,6 +352,53 @@ function getCandidateBaseUrls(): string[] {
   return ['/api/backend', 'https://sih-sentinel-backend.onrender.com'];
 }
 
+async function compressImageForScreening(file: File, maxDim: number = 1200): Promise<File> {
+  if (typeof window === 'undefined' || !file.type.startsWith('image/')) {
+    return file;
+  }
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width <= maxDim && height <= maxDim && file.size < 400 * 1024) {
+        return resolve(file);
+      }
+      if (width > height && width > maxDim) {
+        height = Math.round((height * maxDim) / width);
+        width = maxDim;
+      } else if (height > maxDim) {
+        width = Math.round((width * maxDim) / height);
+        height = maxDim;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return resolve(file);
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) return resolve(file);
+          const compressed = new File([blob], file.name.replace(/\.[^/.]+$/, '') + '.jpg', {
+            type: 'image/jpeg',
+            lastModified: Date.now(),
+          });
+          resolve(compressed);
+        },
+        'image/jpeg',
+        0.88
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file);
+    };
+    img.src = url;
+  });
+}
+
 async function analyzeDocumentWithBiometrics(
   docFileInput: File | SamplePreset,
   liveFaceInput: File | null,
@@ -363,11 +410,15 @@ async function analyzeDocumentWithBiometrics(
     return docFileInput.mockResult;
   }
 
+  // Pre-compress images in browser to ~120KB for high-speed transmission & instant AI inference
+  const readyDocFile = await compressImageForScreening(docFileInput as File, 1200);
+  const readyLiveFace = liveFaceInput ? await compressImageForScreening(liveFaceInput, 800) : null;
+
   // Live File Upload -> Send to FastAPI Backend
   const formData = new FormData();
-  formData.append('file', docFileInput as File);
-  if (liveFaceInput) {
-    formData.append('live_face', liveFaceInput);
+  formData.append('file', readyDocFile);
+  if (readyLiveFace) {
+    formData.append('live_face', readyLiveFace);
   }
 
   const baseUrls = getCandidateBaseUrls();
