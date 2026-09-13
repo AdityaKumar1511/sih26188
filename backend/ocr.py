@@ -1031,25 +1031,18 @@ def detect_and_decode_qr(image_bytes: bytes) -> Dict[str, Any]:
             "details": "OpenCV not installed for QR detection."
         }
 
-    try:
         pil_img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        # Scale to optimal width (max 600px) for fast QR localization
+        w, h = pil_img.size
+        if w > 600:
+            scale = 600.0 / w
+            pil_img = pil_img.resize((int(w * scale), int(h * scale)), Image.Resampling.BILINEAR)
+            
         img_np = np.array(pil_img)
         img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
 
         detector = cv2.QRCodeDetector()
-        qr_text = ""
-        
-        for scale in [1.0, 1.5, 0.75]:
-            if scale == 1.0:
-                scaled = img_bgr
-            else:
-                h, w = img_bgr.shape[:2]
-                scaled = cv2.resize(img_bgr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_CUBIC)
-
-            decoded_info, pts, _ = detector.detectAndDecode(scaled)
-            if decoded_info:
-                qr_text = decoded_info
-                break
+        qr_text, pts, _ = detector.detectAndDecode(img_bgr)
 
         if not qr_text:
             return {

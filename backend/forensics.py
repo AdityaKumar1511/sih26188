@@ -28,6 +28,10 @@ def compute_ela(image_bytes: bytes, quality: int = 90, multiplier: int = 15) -> 
     """
     try:
         original = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        w, h = original.size
+        if w > 600:
+            scale = 600.0 / w
+            original = original.resize((int(w * scale), int(h * scale)), Image.Resampling.BILINEAR)
         
         # Save to temporary in-memory buffer at specified quality
         resaved_buffer = io.BytesIO()
@@ -86,6 +90,10 @@ def compute_image_sharpness_and_lighting(image_bytes: bytes) -> Dict[str, Any]:
 
     try:
         pil_img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        w, h = pil_img.size
+        if w > 600:
+            scale = 600.0 / w
+            pil_img = pil_img.resize((int(w * scale), int(h * scale)), Image.Resampling.BILINEAR)
         img_np = np.array(pil_img)
         gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
 
