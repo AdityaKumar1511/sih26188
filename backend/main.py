@@ -425,6 +425,14 @@ async def extract_and_validate(
     # 9. Build Extracted Fields List
     extracted_items: List[ExtractedFieldItem] = []
     
+    # Document Type Key
+    extracted_items.append(ExtractedFieldItem(
+        field_name="Document Type",
+        value=f"{doc_type} CARD" if doc_type in ("AADHAAR", "PAN") else (f"{doc_type} (TYPE P)" if doc_type == "PASSPORT" else (doc_type if doc_type != "UNKNOWN" else "IDENTITY DOCUMENT")),
+        status="verified",
+        confidence=99
+    ))
+
     if name:
         extracted_items.append(ExtractedFieldItem(
             field_name="Full Name",
