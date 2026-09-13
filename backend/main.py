@@ -16,12 +16,6 @@ try:
 except Exception:
     pass
 
-try:
-    import torch
-    torch.set_num_threads(1)
-except Exception:
-    pass
-
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
