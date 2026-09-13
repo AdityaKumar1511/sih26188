@@ -109,7 +109,7 @@ def _cv2_to_base64_jpeg(img_bgr: np.ndarray, quality: int = 90) -> str:
 
 def detect_face(img_bgr: np.ndarray) -> Optional[Dict[str, Any]]:
     """
-    Detects the primary face in an image.
+    Detects the primary face in an image with memory-safe scaling.
     Returns bounding box, landmarks, aligned face crop, and confidence.
     """
     if img_bgr is None or img_bgr.size == 0:
@@ -117,12 +117,24 @@ def detect_face(img_bgr: np.ndarray) -> Optional[Dict[str, Any]]:
 
     h, w = img_bgr.shape[:2]
 
+    # Memory-safe scale normalization for YuNet (prevents C++ buffer alloc crashes on cloud containers)
+    max_dim = 400
+    if max(w, h) > max_dim:
+        scale = max_dim / max(w, h)
+        work_w = int(w * scale)
+        work_h = int(h * scale)
+        work_img = cv2.resize(img_bgr, (work_w, work_h), interpolation=cv2.INTER_AREA)
+    else:
+        scale = 1.0
+        work_w, work_h = w, h
+        work_img = img_bgr
+
     # 1. Try YuNet Deep Detector
-    yunet = _get_yunet_detector(w, h)
+    yunet = _get_yunet_detector(work_w, work_h)
     if yunet is not None:
         try:
-            yunet.setInputSize((w, h))
-            _, faces = yunet.detect(img_bgr)
+            yunet.setInputSize((work_w, work_h))
+            _, faces = yunet.detect(work_img)
             if faces is not None and len(faces) > 0:
                 # Select the largest face by area
                 best_face = None
@@ -135,7 +147,12 @@ def detect_face(img_bgr: np.ndarray) -> Optional[Dict[str, Any]]:
                         best_face = f
 
                 if best_face is not None:
-                    fx, fy, fw, fh = int(best_face[0]), int(best_face[1]), int(best_face[2]), int(best_face[3])
+                    # Scale coordinates back to original image resolution
+                    inv_scale = 1.0 / scale
+                    fx = int(best_face[0] * inv_scale)
+                    fy = int(best_face[1] * inv_scale)
+                    fw = int(best_face[2] * inv_scale)
+                    fh = int(best_face[3] * inv_scale)
                     fx = max(0, fx)
                     fy = max(0, fy)
                     fw = min(w - fx, fw)
@@ -152,10 +169,18 @@ def detect_face(img_bgr: np.ndarray) -> Optional[Dict[str, Any]]:
                     face_crop = img_bgr[crop_y1:crop_y2, crop_x1:crop_x2]
                     conf = float(best_face[14])
 
+                    scaled_vec = np.array(best_face, copy=True)
+                    scaled_vec[0] *= inv_scale
+                    scaled_vec[1] *= inv_scale
+                    scaled_vec[2] *= inv_scale
+                    scaled_vec[3] *= inv_scale
+                    for li in range(4, 14):
+                        scaled_vec[li] *= inv_scale
+
                     return {
                         "box": (fx, fy, fw, fh),
                         "crop": face_crop,
-                        "raw_face_vector": best_face,
+                        "raw_face_vector": scaled_vec,
                         "confidence": round(conf * 100, 1),
                         "detector": "yunet"
                     }
@@ -163,15 +188,18 @@ def detect_face(img_bgr: np.ndarray) -> Optional[Dict[str, Any]]:
             logger.warning(f"YuNet detection exception: {e}")
 
     # 2. Fallback: Haar Cascade or Grayscale Contour Face Search
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(work_img, cv2.COLOR_BGR2GRAY)
     cascade = _get_haar_cascade()
     if cascade is not None:
         try:
-            faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
+            faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
             if len(faces) > 0:
-                # Sort by area descending
                 faces = sorted(faces, key=lambda b: b[2] * b[3], reverse=True)
-                fx, fy, fw, fh = faces[0]
+                inv_scale = 1.0 / scale
+                fx = int(faces[0][0] * inv_scale)
+                fy = int(faces[0][1] * inv_scale)
+                fw = int(faces[0][2] * inv_scale)
+                fh = int(faces[0][3] * inv_scale)
                 margin_x = int(fw * 0.20)
                 margin_y = int(fh * 0.25)
                 crop_x1 = max(0, fx - margin_x)
@@ -190,7 +218,7 @@ def detect_face(img_bgr: np.ndarray) -> Optional[Dict[str, Any]]:
         except Exception as e:
             logger.warning(f"Haar cascade detection exception: {e}")
 
-    # 3. Fallback for cropped ID portraits (if whole image is already a portrait)
+    # 3. Fallback for cropped ID portraits
     if 0.6 <= (w / max(1, h)) <= 1.4 and h >= 80 and w >= 80:
         return {
             "box": (0, 0, w, h),
