@@ -1030,7 +1030,7 @@ def detect_and_decode_qr(image_bytes: bytes) -> Dict[str, Any]:
             "raw_payload": None,
             "details": "OpenCV not installed for QR detection."
         }
-
+    try:
         pil_img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
         # Scale to optimal width (max 600px) for fast QR localization
         w, h = pil_img.size
