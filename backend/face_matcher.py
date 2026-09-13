@@ -240,6 +240,11 @@ def compute_passive_liveness(img_bgr: np.ndarray, face_crop: np.ndarray) -> Dict
             "details": "Insufficient facial pixels for liveness analysis."
         }
 
+    # Scale face crop to max 128px for lightweight FFT and HSV analysis
+    if max(face_crop.shape[:2]) > 128:
+        scale_l = 128.0 / max(face_crop.shape[:2])
+        face_crop = cv2.resize(face_crop, (int(face_crop.shape[1] * scale_l), int(face_crop.shape[0] * scale_l)), interpolation=cv2.INTER_AREA)
+
     h, w = face_crop.shape[:2]
     gray = cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY)
 
@@ -401,6 +406,14 @@ def match_faces_1to1(document_image_bytes: bytes, live_image_bytes: bytes) -> Di
             "live_face_crop_base64": None,
             "forensic_trace": ["ERROR: Image decode failed."]
         }
+
+    # Scale to optimal resolution (max 600px) for ultra-low memory usage
+    if max(doc_bgr.shape[:2]) > 600:
+        s_d = 600.0 / max(doc_bgr.shape[:2])
+        doc_bgr = cv2.resize(doc_bgr, (int(doc_bgr.shape[1] * s_d), int(doc_bgr.shape[0] * s_d)), interpolation=cv2.INTER_AREA)
+    if max(live_bgr.shape[:2]) > 600:
+        s_l = 600.0 / max(live_bgr.shape[:2])
+        live_bgr = cv2.resize(live_bgr, (int(live_bgr.shape[1] * s_l), int(live_bgr.shape[0] * s_l)), interpolation=cv2.INTER_AREA)
 
     forensic_trace: List[str] = [
         f"Ingested Document Scan ({doc_bgr.shape[1]}x{doc_bgr.shape[0]}) and Live Capture ({live_bgr.shape[1]}x{live_bgr.shape[0]})."
