@@ -1,12 +1,23 @@
 import os
 import logging
 from io import BytesIO
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, Any
 
 import numpy as np
 from PIL import Image
 
 logger = logging.getLogger(__name__)
+
+try:
+    import torch
+    from torch import nn
+    _TORCH_AVAILABLE = True
+except ImportError:
+    torch = None
+    class nn:
+        class Module:
+            pass
+    _TORCH_AVAILABLE = False
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
 MODEL_PATH = os.path.join(MODEL_DIR, "face_document_cnn.pth")
