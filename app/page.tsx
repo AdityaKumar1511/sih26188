@@ -530,58 +530,52 @@ async function generateClientFallbackResult(docFile: File, liveFaceFile: File | 
     ];
   }
 
-  // --- Default Client Dynamic Fallback ---
+  // --- Unverified / Offline Fallback (Never returns false positive 90% score) ---
   return {
-    authenticityScore: 92,
-    verdict: 'AUTHENTIC',
-    verdictDescription: `Verified Authentic. ${docTitle} parameters, algorithmic checksum validation, and optical forensic screening passed.`,
+    authenticityScore: 25,
+    verdict: 'SUSPICIOUS',
+    verdictDescription: 'Cloud AI Screening Engine unreachable. Please ensure the Python backend at https://sih-sentinel-backend.onrender.com is running and retry.',
     processingTimeMs: 1250,
-    documentType: docTitle,
-    confidence: 0.96,
+    documentType: 'Unverified Scan Ingestion',
+    confidence: 0.25,
     boundingBoxes: [
       {
         id: 'b1',
-        label: 'Verified Checksum',
-        type: 'info',
-        x: 25,
-        y: 42,
-        width: 50,
-        height: 18,
-        description: 'Algorithmic checksum verified against national standard.',
-        confidence: 0.98
-      },
-      {
-        id: 'b2',
-        label: 'Document Portrait Zone',
-        type: 'info',
+        label: 'Unverified Canvas',
+        type: 'critical',
         x: 10,
         y: 25,
-        width: 28,
-        height: 45,
-        description: 'Facial portrait region isolated for biometric matching.',
-        confidence: 0.96
+        width: 80,
+        height: 50,
+        description: 'Live server OCR & checksum verification could not be executed.',
+        confidence: 0.25
       }
     ],
-    extractedFields,
-    validationChecks,
+    extractedFields: [
+      { fieldName: 'Backend Connection', value: 'Offline / Network Latency', status: 'flagged', confidence: 10, anomalyDetails: 'Direct connection to Python AI backend interrupted.' },
+      { fieldName: 'Document Source', value: docFile.name || 'Uploaded File', status: 'warning', confidence: 50 },
+      { fieldName: 'Verification Verdict', value: 'UNVERIFIED (Requires Live Server)', status: 'flagged', confidence: 20 }
+    ],
+    validationChecks: [
+      { id: 'c1', name: 'Server Connectivity', category: 'System', status: 'fail', details: 'Unable to reach live FastAPI backend for neural OCR extraction', score: 0 },
+      { id: 'c2', name: 'Algorithmic Checksum', category: 'Algorithmic', status: 'fail', details: 'Checksum requires live Python Verhoeff/ICAO validation engine', score: 0 }
+    ],
     biometricResult: docCropBase64 ? {
-      isMatch: true,
-      matchScore: 90,
-      cosineSimilarity: 0.90,
-      livenessScore: 92,
-      livenessStatus: 'GENUINE_LIVE_PERSON',
-      isLivePerson: true,
-      verdict: 'MATCH_VERIFIED',
-      verdictDescription: 'Identity Confirmed: Passenger live face matches document portrait (90% confidence).',
+      isMatch: false,
+      matchScore: 30,
+      cosineSimilarity: 0.30,
+      livenessScore: 40,
+      livenessStatus: 'UNVERIFIED',
+      isLivePerson: false,
+      verdict: 'UNVERIFIED',
+      verdictDescription: 'Live facial matching requires active SFace neural network connection.',
       docFaceCropBase64: docCropBase64,
       liveFaceCropBase64: liveCropBase64
     } : undefined,
     forensicTrace: [
       `Ingested file: ${docFile.name} (${(docFile.size / 1024).toFixed(1)} KB).`,
-      '5-Stage OpenCV Preprocessing executed (Grayscale, Bilateral Filter, CLAHE, Adaptive Threshold, Deskewing).',
-      `Optical extraction parsed key fields for ${docTitle}.`,
-      'Algorithmic checksum verified.',
-      'Zero-PII SHA-256 verdict digest anchored to Polygon PoS.'
+      'Failed to receive response from cloud backend.',
+      'Manual retry recommended.'
     ],
     blockchainAnchor: {
       verdictHash: `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`,
@@ -595,10 +589,10 @@ async function generateClientFallbackResult(docFile: File, liveFaceFile: File | 
       merkleRoot: '0x6fbc268d87a4128f73b64f9b8c0df1d8591e988220c35f2a1a8c3d9051d95392',
       nonPiiDigestPreview: {
         agency: 'Ministry of Home Affairs - PS26188',
-        doc_type: docTitle,
-        verdict: 'AUTHENTIC',
-        authenticity_score: 92,
-        checksum_passed: true
+        doc_type: 'Unverified Document',
+        verdict: 'SUSPICIOUS',
+        authenticity_score: 25,
+        checksum_passed: false
       }
     }
   };
