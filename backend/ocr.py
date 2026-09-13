@@ -155,11 +155,20 @@ def preprocess_image(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
 
 def perform_ocr(image_bytes: bytes) -> Dict[str, Any]:
     """
-    Executes fast, targeted multi-pass OCR on document image.
-    Uses PSM 6 (uniform block) and PSM 3 (auto page segmentation).
+    Executes fast, memory-safe single-pass OCR on document image.
+    Extracts full raw text and word bounding boxes in one execution to prevent CPU exhaustion on cloud tier.
     """
     preprocessed_images = preprocess_image(image_bytes)
     raw_pil = preprocessed_images[0][1]
+    deskewed_pil = next((img for label, img in preprocessed_images if label == "deskewed"), raw_pil)
+
+    # Scale to optimal OCR width (max 950px) to guarantee sub-second execution
+    w, h = deskewed_pil.size
+    if w > 950:
+        scale = 950.0 / w
+        target_pil = deskewed_pil.resize((int(w * scale), int(h * scale)), Image.Resampling.BILINEAR)
+    else:
+        target_pil = deskewed_pil
 
     best_text = ""
     all_texts: List[str] = []
@@ -168,39 +177,21 @@ def perform_ocr(image_bytes: bytes) -> Dict[str, Any]:
 
     if pytesseract is not None:
         try:
-            # Pass 1: Deskewed / Raw image with PSM 3 (Auto segmentation - best for full layout, PAN numbers, names, DOB)
-            deskewed_pil = next((img for label, img in preprocessed_images if label == "deskewed"), raw_pil)
-            txt1 = pytesseract.image_to_string(deskewed_pil, lang='eng', config='--psm 3').strip()
-            if txt1:
-                all_texts.append(txt1)
-                best_text = txt1
-                engine_used = "tesseract"
+            # Single-pass image_to_data extraction (fetches text, word coordinates, and confidences simultaneously)
+            data_dict = pytesseract.image_to_data(target_pil, output_type=pytesseract.Output.DICT, config='--psm 3')
+            lines_map: Dict[int, List[str]] = {}
 
-            # Pass 2: CLAHE image with PSM 6 (Uniform block - best for structured cards & high-contrast Aadhaar)
-            clahe_img = next((img for label, img in preprocessed_images if label == "clahe"), raw_pil)
-            txt2 = pytesseract.image_to_string(clahe_img, lang='eng', config='--psm 6').strip()
-            if txt2:
-                all_texts.append(txt2)
-                if not best_text or len(txt2) > len(best_text):
-                    best_text = txt2
-                engine_used = "tesseract"
-
-            # Pass 3: Thresholded image with PSM 6 (Great for MRZ / stamped high contrast text)
-            thresh_img = next((img for label, img in preprocessed_images if label == "threshold"), None)
-            if thresh_img is not None:
-                txt3 = pytesseract.image_to_string(thresh_img, lang='eng', config='--psm 6').strip()
-                if txt3:
-                    all_texts.append(txt3)
-                    engine_used = "tesseract"
-
-            # Extract word bounding boxes and confidences
-            try:
-                target_img = clahe_img if clahe_img is not None else raw_pil
-                data_dict = pytesseract.image_to_data(target_img, output_type=pytesseract.Output.DICT)
-                for i in range(len(data_dict['text'])):
-                    t = data_dict['text'][i].strip()
-                    conf = int(data_dict['conf'][i])
-                    if t and conf > 15:
+            for i in range(len(data_dict['text'])):
+                t = data_dict['text'][i].strip()
+                conf = int(data_dict['conf'][i])
+                line_num = data_dict['line_num'][i]
+                
+                if t:
+                    if line_num not in lines_map:
+                        lines_map[line_num] = []
+                    lines_map[line_num].append(t)
+                    
+                    if conf > 15:
                         ocr_data.append({
                             "text": t,
                             "conf": conf,
@@ -209,11 +200,21 @@ def perform_ocr(image_bytes: bytes) -> Dict[str, Any]:
                             "width": data_dict['width'][i],
                             "height": data_dict['height'][i]
                         })
-            except Exception as e:
-                logger.debug(f"image_to_data error: {e}")
 
+            sorted_lines = [ " ".join(lines_map[k]) for k in sorted(lines_map.keys()) ]
+            best_text = "\n".join(sorted_lines).strip()
+            if best_text:
+                all_texts.append(best_text)
+                engine_used = "tesseract"
         except Exception as e:
-            logger.warning(f"Pytesseract failed: {e}")
+            logger.warning(f"Pytesseract fast data extraction failed: {e}")
+            try:
+                best_text = pytesseract.image_to_string(target_pil, lang='eng', config='--psm 3').strip()
+                if best_text:
+                    all_texts.append(best_text)
+                    engine_used = "tesseract"
+            except Exception as e2:
+                logger.warning(f"Pytesseract fallback failed: {e2}")
 
     # Fallback to EasyOCR if tesseract yielded nothing
     if not best_text.strip():
