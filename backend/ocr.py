@@ -287,6 +287,10 @@ _NOISE_KEYWORDS = frozenset([
 
 def _is_header_or_noise(text: str) -> bool:
     """Checks if a string is header text, watermark noise, domain name, or non-name."""
+    # Reject lines containing Devanagari/Hindi characters (English name must be pure Latin script)
+    if re.search(r'[\u0900-\u097F]', text):
+        return True
+
     upper = text.upper().strip()
     if not upper or len(upper) < 3:
         return True
@@ -294,7 +298,6 @@ def _is_header_or_noise(text: str) -> bool:
     # Reject web domains, URLs, email addresses
     if re.search(r'\.(COM|ORG|NET|IN|GOV|EDU|IO|CO|XYZ)\b', upper) or "HTTP" in upper or "WWW." in upper or "@" in upper:
         return True
-
 
     # Reject relative markers: S/O, D/O, W/O, C/O
     if re.search(r'\b(S/O|D/O|W/O|C/O|SO|DO|WO|CO|FATHER|HUSBAND|MOTHER|GUARDIAN)\b', upper):
@@ -317,7 +320,11 @@ def _is_header_or_noise(text: str) -> bool:
 
 
 def _clean_name_candidate(text: str) -> str:
-    """Cleans a raw OCR line into a proper name string."""
+    """Cleans a raw OCR line into a proper English name string."""
+    # If the raw line contains Hindi/Devanagari, it is not the English name
+    if re.search(r'[\u0900-\u097F]', text):
+        return ""
+
     cleaned = re.sub(r'[^A-Za-z\s\.]', ' ', text)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
     words = cleaned.split()
