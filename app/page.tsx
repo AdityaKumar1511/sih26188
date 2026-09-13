@@ -346,10 +346,10 @@ function getCandidateBaseUrls(): string[] {
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     if (host === 'localhost' || host === '127.0.0.1') {
-      return ['http://127.0.0.1:8000', '/api/backend', 'https://sih-sentinel-backend.onrender.com'];
+      return ['http://127.0.0.1:8000', 'https://sih-sentinel-backend.onrender.com', '/api/backend'];
     }
   }
-  return ['/api/backend', 'https://sih-sentinel-backend.onrender.com'];
+  return ['https://sih-sentinel-backend.onrender.com', '/api/backend'];
 }
 
 async function compressImageForScreening(file: File, maxDim: number = 1200): Promise<File> {
