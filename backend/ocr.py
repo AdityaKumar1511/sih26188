@@ -169,8 +169,8 @@ def perform_ocr(image_bytes: bytes) -> Dict[str, Any]:
 
     if pytesseract is not None:
         try:
-            # Single-pass image_to_data extraction (fetches text, word coordinates, and confidences simultaneously)
-            data_dict = pytesseract.image_to_data(target_pil, output_type=pytesseract.Output.DICT, config='--psm 3')
+            # Single-pass image_to_data extraction with strict 6s timeout
+            data_dict = pytesseract.image_to_data(target_pil, output_type=pytesseract.Output.DICT, config='--psm 3', timeout=6)
             lines_map: Dict[int, List[str]] = {}
 
             for i in range(len(data_dict['text'])):
@@ -201,7 +201,7 @@ def perform_ocr(image_bytes: bytes) -> Dict[str, Any]:
         except Exception as e:
             logger.warning(f"Pytesseract fast data extraction failed: {e}")
             try:
-                best_text = pytesseract.image_to_string(target_pil, lang='eng', config='--psm 3').strip()
+                best_text = pytesseract.image_to_string(target_pil, lang='eng', config='--psm 3', timeout=6).strip()
                 if best_text:
                     all_texts.append(best_text)
                     engine_used = "tesseract"

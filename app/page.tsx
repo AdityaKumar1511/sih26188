@@ -536,9 +536,6 @@ async function analyzeDocumentWithBiometrics(
     try {
       const formData = new FormData();
       formData.append('file', readyDocFile);
-      if (readyLiveFace) {
-        formData.append('live_face', readyLiveFace);
-      }
       console.log(`[Screening Engine] Connecting to ${baseUrl}/extract-and-validate...`);
       const res = await fetch(`${baseUrl}/extract-and-validate`, {
         method: 'POST',
@@ -566,6 +563,57 @@ async function analyzeDocumentWithBiometrics(
   }
 
   const data = await response.json();
+
+  // If live selfie capture was provided, execute dedicated 1:1 SFace biometric verification
+  if (readyLiveFace) {
+    try {
+      const matchFormData = new FormData();
+      matchFormData.append('document_image', readyDocFile);
+      matchFormData.append('live_face_image', readyLiveFace);
+
+      for (const baseUrl of baseUrls) {
+        try {
+          const matchController = new AbortController();
+          const matchTimer = setTimeout(() => matchController.abort(), 45000);
+          const matchRes = await fetch(`${baseUrl}/match-face`, {
+            method: 'POST',
+            body: matchFormData,
+            signal: matchController.signal,
+          });
+          clearTimeout(matchTimer);
+
+          if (matchRes && matchRes.ok) {
+            const matchData = await matchRes.json();
+            if (matchData && matchData.success) {
+              data.biometric_verification = {
+                is_match: matchData.is_match,
+                match_score: matchData.match_score,
+                cosine_similarity: matchData.cosine_similarity,
+                l2_distance: matchData.l2_distance,
+                liveness_score: matchData.liveness_score,
+                liveness_status: matchData.liveness_status,
+                is_live_person: matchData.is_live_person,
+                verdict: matchData.verdict,
+                verdict_description: matchData.verdict_description,
+                doc_face_crop_base64: matchData.doc_face_crop_base64,
+                live_face_crop_base64: matchData.live_face_crop_base64,
+                doc_face_confidence: matchData.doc_face_confidence,
+                live_face_confidence: matchData.live_face_confidence
+              };
+              if (matchData.forensic_trace && Array.isArray(matchData.forensic_trace)) {
+                data.forensic_trace = (data.forensic_trace || []).concat(matchData.forensic_trace);
+              }
+              break;
+            }
+          }
+        } catch (mErr) {
+          console.warn(`[Screening Engine] Biometric match endpoint attempt failed on ${baseUrl}:`, mErr);
+        }
+      }
+    } catch (e) {
+      console.warn('[Screening Engine] Biometric matching step notice:', e);
+    }
+  }
 
   let biometricRes: BiometricResult | undefined = undefined;
   if (data.biometric_verification) {
