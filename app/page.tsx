@@ -557,7 +557,7 @@ async function generateClientFallbackResult(docFile: File, liveFaceFile: File | 
       { fieldName: 'Verification Verdict', value: 'UNVERIFIED (Requires Live Server)', status: 'flagged', confidence: 20 }
     ],
     validationChecks: [
-      { id: 'c1', name: 'Server Connectivity', category: 'System', status: 'fail', details: 'Unable to reach live FastAPI backend for neural OCR extraction', score: 0 },
+      { id: 'c1', name: 'Server Connectivity', category: 'Forensic', status: 'fail', details: 'Unable to reach live FastAPI backend for neural OCR extraction', score: 0 },
       { id: 'c2', name: 'Algorithmic Checksum', category: 'Algorithmic', status: 'fail', details: 'Checksum requires live Python Verhoeff/ICAO validation engine', score: 0 }
     ],
     biometricResult: docCropBase64 ? {
@@ -565,7 +565,7 @@ async function generateClientFallbackResult(docFile: File, liveFaceFile: File | 
       matchScore: 30,
       cosineSimilarity: 0.30,
       livenessScore: 40,
-      livenessStatus: 'UNVERIFIED',
+      livenessStatus: 'SKIPPED',
       isLivePerson: false,
       verdict: 'UNVERIFIED',
       verdictDescription: 'Live facial matching requires active SFace neural network connection.',
