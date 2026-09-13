@@ -208,7 +208,7 @@ async def extract_and_validate(
             )
         
         img = Image.open(io.BytesIO(contents))
-        img.verify()
+        img.load()
     except HTTPException:
         raise
     except Exception as e:
