@@ -424,27 +424,29 @@ async def extract_and_validate(
     else:
         # Document-Only Mode: Extract the document portrait using YuNet
         try:
-            from face_matcher import detect_and_crop_face, _img_to_base64, analyze_passive_liveness
-            doc_detection = detect_and_crop_face(file_bytes)
-            if doc_detection and doc_detection.get("crop") is not None:
-                doc_crop_b64 = _img_to_base64(doc_detection["crop"])
-                live_stat = analyze_passive_liveness(doc_detection["crop"])
-                biometric_verification_obj = BiometricVerificationResult(
-                    is_match=True,
-                    match_score=92,
-                    cosine_similarity=0.920,
-                    l2_distance=0.32,
-                    liveness_score=live_stat.get("score", 92),
-                    liveness_status=live_stat.get("status", "GENUINE_LIVE_PERSON"),
-                    is_live_person=True,
-                    verdict="PORTRAIT_EXTRACTED",
-                    verdict_description="Document portrait facial region isolated via YuNet neural network.",
-                    doc_face_crop_base64=doc_crop_b64,
-                    live_face_crop_base64=None,
-                    doc_face_confidence=doc_detection.get("confidence", 95.0),
-                    live_face_confidence=None
-                )
-                forensic_trace.append("Document portrait isolated via YuNet neural network.")
+            from face_matcher import detect_face, _cv2_to_base64_jpeg, _bytes_to_cv2, compute_passive_liveness
+            doc_cv2 = _bytes_to_cv2(contents)
+            if doc_cv2 is not None:
+                doc_detection = detect_face(doc_cv2)
+                if doc_detection and doc_detection.get("crop") is not None:
+                    doc_crop_b64 = _cv2_to_base64_jpeg(doc_detection["crop"])
+                    live_stat = compute_passive_liveness(doc_detection["crop"])
+                    biometric_verification_obj = BiometricVerificationResult(
+                        is_match=True,
+                        match_score=92,
+                        cosine_similarity=0.920,
+                        l2_distance=0.32,
+                        liveness_score=live_stat.get("liveness_score", 92),
+                        liveness_status=live_stat.get("status", "GENUINE_LIVE_PERSON"),
+                        is_live_person=True,
+                        verdict="PORTRAIT_EXTRACTED",
+                        verdict_description="Document portrait facial region isolated via YuNet neural network.",
+                        doc_face_crop_base64=doc_crop_b64,
+                        live_face_crop_base64=None,
+                        doc_face_confidence=doc_detection.get("confidence", 95.0),
+                        live_face_confidence=None
+                    )
+                    forensic_trace.append("Document portrait isolated via YuNet neural network.")
         except Exception as e:
             logger.warning(f"Document face extraction error: {e}")
 
