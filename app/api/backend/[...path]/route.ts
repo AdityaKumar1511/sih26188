@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'https://sih-sentinel-backend.onrender.com';
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'https://sih26188-naq6.onrender.com';
 
 async function handleProxy(req: NextRequest, { params }: { params: { path: string[] } }) {
   const path = params.path ? params.path.join('/') : '';

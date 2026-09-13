@@ -343,13 +343,21 @@ const SAMPLE_PRESETS: SamplePreset[] = [
 // ============================================================================
 
 function getCandidateBaseUrls(): string[] {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '');
+  const list: string[] = [];
+  if (envUrl) {
+    list.push(envUrl);
+  }
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     if (host === 'localhost' || host === '127.0.0.1') {
-      return ['http://127.0.0.1:8000', 'https://sih-sentinel-backend.onrender.com', '/api/backend'];
+      list.push('http://127.0.0.1:8000');
     }
   }
-  return ['https://sih-sentinel-backend.onrender.com', '/api/backend'];
+  list.push('https://sih26188-naq6.onrender.com');
+  list.push('/api/backend');
+  list.push('https://sih-sentinel-backend.onrender.com');
+  return Array.from(new Set(list));
 }
 
 async function compressImageForScreening(file: File, maxDim: number = 1200): Promise<File> {
