@@ -1919,8 +1919,9 @@ export default function DocumentScreeningApp() {
                               className="w-full h-full object-cover rounded"
                             />
                           ) : (
-                            <div className="text-neutral-600">
-                              <Camera className="w-6 h-6 mx-auto" />
+                            <div className="text-neutral-500 text-center p-2">
+                              <Camera className="w-5 h-5 mx-auto mb-1 text-orange-400 opacity-80" />
+                              <span className="text-[9px] font-mono block text-neutral-400">Live Kiosk Camera</span>
                             </div>
                           )}
                         </div>
