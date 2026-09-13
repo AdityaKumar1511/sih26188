@@ -239,6 +239,7 @@ async def extract_and_validate(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"OCR processing failed: {str(e)}"
         )
+    gc.collect()
 
     try:
         qr_res = await asyncio.to_thread(detect_and_decode_qr, contents)
@@ -257,6 +258,7 @@ async def extract_and_validate(
     except Exception as e:
         logger.warning(f"Sharpness check failed: {e}")
         sharp_res = {"sharpness_score": 70, "laplacian_variance": 0.0, "blur_level": "UNKNOWN", "details": "Image sharpness could not be evaluated."}
+    gc.collect()
 
     # Biometric 1:1 facial comparison (if live selfie uploaded)
     face_match_res = None
@@ -266,6 +268,7 @@ async def extract_and_validate(
         except Exception as e:
             logger.warning(f"Face match failed: {e}")
             face_match_res = None
+    gc.collect()
 
     try:
         cnn_doc_result = await asyncio.to_thread(predict_screening_image, contents)

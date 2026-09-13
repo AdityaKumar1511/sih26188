@@ -118,18 +118,18 @@ def preprocess_image(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
     except Exception:
         pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-    results: List[Tuple[str, Image.Image]] = [("raw", pil_image)]
+    results: List[Tuple[str, Image.Image]] = []
 
     if cv2 is None:
-        return results
+        return [("raw", pil_image)]
 
     open_cv_image = np.array(pil_image)
     open_cv_image = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2BGR)
 
-    # Stage 1: Scale Normalization
+    # Stage 1: Scale Normalization (max 950px width for low memory)
     h, w = open_cv_image.shape[:2]
-    if w > 1200:
-        scale_factor = 1100 / w
+    if w > 950:
+        scale_factor = 950.0 / w
         open_cv_image = cv2.resize(
             open_cv_image,
             (int(w * scale_factor), int(h * scale_factor)),
@@ -138,18 +138,10 @@ def preprocess_image(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
 
     # Stage 2: Automatic Deskewing
     deskewed_bgr = _deskew_image(open_cv_image)
-    results.append(("deskewed", Image.fromarray(cv2.cvtColor(deskewed_bgr, cv2.COLOR_BGR2RGB))))
+    deskewed_pil = Image.fromarray(cv2.cvtColor(deskewed_bgr, cv2.COLOR_BGR2RGB))
+    results.append(("deskewed", deskewed_pil))
 
-    # Stage 3: Grayscale + CLAHE
-    gray = cv2.cvtColor(deskewed_bgr, cv2.COLOR_BGR2GRAY)
-    clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
-    clahe_img = clahe.apply(gray)
-    results.append(("clahe", Image.fromarray(clahe_img)))
-
-    # Stage 4 & 5: High-Contrast Otsu Adaptive Thresholding (for MRZ and crisp OCR)
-    _, otsu = cv2.threshold(clahe_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    results.append(("threshold", Image.fromarray(otsu)))
-
+    del open_cv_image, deskewed_bgr
     return results
 
 
