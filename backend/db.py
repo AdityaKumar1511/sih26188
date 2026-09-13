@@ -106,16 +106,20 @@ async def cross_check_record(
     clean_id = normalize_id(id_number)
     clean_doc_type = doc_type.strip().upper()
 
-    # 1. Try Supabase Query
+    # 1. Try Supabase Query in thread pool with strict 2.5s timeout
     if supabase_client is not None:
         try:
-            response = supabase_client.table("government_id_registry") \
-                .select("*") \
-                .eq("doc_type", clean_doc_type) \
-                .eq("id_number", clean_id) \
-                .execute()
+            def _query_supabase():
+                return supabase_client.table("government_id_registry") \
+                    .select("*") \
+                    .eq("doc_type", clean_doc_type) \
+                    .eq("id_number", clean_id) \
+                    .execute()
 
-            if response.data and len(response.data) > 0:
+            import asyncio
+            response = await asyncio.wait_for(asyncio.to_thread(_query_supabase), timeout=2.5)
+
+            if response and response.data and len(response.data) > 0:
                 record = response.data[0]
                 db_name = record.get("full_name", "").upper()
                 name_match = None
@@ -137,7 +141,7 @@ async def cross_check_record(
                     "source": "supabase"
                 }
         except Exception as e:
-            logger.error(f"Supabase lookup error: {e}. Falling back to mock registry.")
+            logger.warning(f"Supabase lookup skipped ({e}). Falling back to in-memory registry.")
 
     # 2. Fallback in-memory query
     matched = next((
