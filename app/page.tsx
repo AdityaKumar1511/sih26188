@@ -399,10 +399,8 @@ async function compressImageForScreening(file: File, maxDim: number = 1200): Pro
   });
 }
 
-async function generateClientFallbackResult(docFile: File, liveFaceFile: File | null): Promise<ScreeningResult> {
-  const fileName = (docFile.name || '').toLowerCase();
-  
-  // Extract real face crops from canvas for live comparison
+async function generateClientFallbackResult(docFile: File, liveFaceFile: File | null, errorMsg?: string): Promise<ScreeningResult> {
+  // Extract real face crops from canvas for live comparison if available
   let docCropBase64: string | undefined = undefined;
   let liveCropBase64: string | undefined = undefined;
 
@@ -411,14 +409,10 @@ async function generateClientFallbackResult(docFile: File, liveFaceFile: File | 
       const docBitmap = await createImageBitmap(docFile).catch(() => null);
       if (docBitmap) {
         const c = document.createElement('canvas');
-        // Check if passport geometry (portrait on the left quadrant)
-        const isPassport = fileName.includes('pass') || fileName.includes('manish') || fileName.includes('p<') || docBitmap.width > docBitmap.height * 1.05 || (!fileName.includes('aadhaar') && !fileName.includes('pan') && !fileName.includes('dl'));
-        
-        const cropX = isPassport ? docBitmap.width * 0.05 : docBitmap.width * 0.65;
-        const cropY = isPassport ? docBitmap.height * 0.35 : docBitmap.height * 0.25;
-        const cropW = isPassport ? docBitmap.width * 0.28 : docBitmap.width * 0.28;
-        const cropH = isPassport ? docBitmap.height * 0.40 : docBitmap.height * 0.45;
-        
+        const cropX = docBitmap.width * 0.15;
+        const cropY = docBitmap.height * 0.20;
+        const cropW = docBitmap.width * 0.40;
+        const cropH = docBitmap.height * 0.50;
         c.width = 240;
         c.height = 300;
         const ctx = c.getContext('2d');
@@ -446,115 +440,34 @@ async function generateClientFallbackResult(docFile: File, liveFaceFile: File | 
         }
       }
     }
-  } catch (e) {
-    // Canvas crop fallback
+  } catch {
+    // ignore canvas errors
   }
 
-  const isMock = fileName.includes('fake') || fileName.includes('0000') || (fileName.includes('mock') && !fileName.includes('pass'));
-  const isPassport = fileName.includes('pass') || fileName.includes('manish') || fileName.includes('p<') || (!fileName.includes('aadhaar') && !fileName.includes('pan') && !fileName.includes('dl') && !isMock);
-  const isPan = fileName.includes('pan');
-  const isDl = fileName.includes('dl') || fileName.includes('license') || fileName.includes('driving');
-
-  let extractedFields: Array<{ fieldName: string; value: string; status: 'verified' | 'warning' | 'flagged'; confidence: number; anomalyDetails?: string }> = [];
-  let validationChecks: Array<{ id: string; name: string; category: string; status: 'pass' | 'fail' | 'warn'; details: string; score: number }> = [];
-  let docTitle = 'Aadhaar Card (UIDAI Standard)';
-
-  if (isPassport) {
-    docTitle = 'Passport (ICAO 9303 TD3)';
-    extractedFields = [
-      { fieldName: 'Document Type', value: 'PASSPORT (TYPE P)', status: 'verified', confidence: 99 },
-      { fieldName: 'Full Name', value: 'JUAN DASEC TAPIA', status: 'verified', confidence: 96 },
-      { fieldName: 'Surname', value: 'TAPIA', status: 'verified', confidence: 98 },
-      { fieldName: 'Given Names', value: 'JUAN DASEC', status: 'verified', confidence: 96 },
-      { fieldName: 'Passport Number', value: 'KV2424725', status: 'verified', confidence: 99 },
-      { fieldName: 'Nationality', value: 'SPANISH (ESP)', status: 'verified', confidence: 99 },
-      { fieldName: 'Date of Birth', value: '06/09/1978', status: 'verified', confidence: 97 },
-      { fieldName: 'Gender', value: 'MALE', status: 'verified', confidence: 98 },
-      { fieldName: 'Date of Expiry', value: '19/02/2032', status: 'verified', confidence: 98 },
-      { fieldName: 'ICAO 9303 MRZ Checksum', value: 'PASSED (4/4 Check Digits Verified)', status: 'verified', confidence: 100 }
-    ];
-    validationChecks = [
-      { id: 'c1', name: 'ICAO 9303 MRZ Zone Extraction', category: 'Structural', status: 'pass', details: 'Part 4 TD3 standard dual-line MRZ zone parsed', score: 99 },
-      { id: 'c2', name: '7-3-1 Weighted Check Digits', category: 'Algorithmic', status: 'pass', details: 'All 4 check digits verified (Doc No, DOB, Expiry, Composite)', score: 100 },
-      { id: 'c3', name: '1:1 Live Biometric Facial Matching', category: 'Biometric', status: 'pass', details: 'Cosine vector similarity: 0.900. Facial closeness verified.', score: 90 },
-      { id: 'c4', name: 'Error Level Analysis (ELA)', category: 'Forensic', status: 'pass', details: 'Uniform compression density across document canvas', score: 94 }
-    ];
-  } else if (isPan) {
-    docTitle = 'Permanent Account Number (Income Tax Dept)';
-    extractedFields = [
-      { fieldName: 'Document Type', value: 'PAN CARD (NSDL / UTIITSL)', status: 'verified', confidence: 99 },
-      { fieldName: 'Full Name', value: 'RAHUL MISHRA', status: 'verified', confidence: 95 },
-      { fieldName: 'Father\'s Name', value: 'SATENDRA MISHRA', status: 'verified', confidence: 94 },
-      { fieldName: 'PAN Number', value: 'ELWPM8089J', status: 'verified', confidence: 99 },
-      { fieldName: 'Date of Birth', value: '30/01/1997', status: 'verified', confidence: 96 },
-      { fieldName: 'Entity Category', value: 'Individual / Person (P)', status: 'verified', confidence: 99 },
-      { fieldName: 'ITD Syntax Rule Checksum', value: 'PASSED (Valid 4th & 5th Characters)', status: 'verified', confidence: 100 }
-    ];
-    validationChecks = [
-      { id: 'c1', name: 'Income Tax Dept Typography & Layout', category: 'Structural', status: 'pass', details: 'Valid 10-digit PAN alphanumeric structure verified', score: 98 },
-      { id: 'c2', name: 'ITD 4th/5th Character Syntax Rule', category: 'Algorithmic', status: 'pass', details: 'Entity code P matches Individual, 5th letter M matches surname Mishra', score: 100 },
-      { id: 'c3', name: '1:1 Live Biometric Facial Matching', category: 'Biometric', status: 'pass', details: 'Facial embeddings extracted via YuNet & SFace neural network', score: 92 },
-      { id: 'c4', name: 'Error Level Analysis (ELA)', category: 'Forensic', status: 'pass', details: 'Zero digital splicing or text insertion detected', score: 95 }
-    ];
-  } else if (isDl) {
-    docTitle = 'Indian Driving License (State Transport)';
-    extractedFields = [
-      { fieldName: 'Document Type', value: 'DRIVING LICENSE (PARIVAHAN)', status: 'verified', confidence: 99 },
-      { fieldName: 'Full Name', value: 'VIKRAM SINGH MEHTA', status: 'verified', confidence: 95 },
-      { fieldName: 'DL Number', value: 'DL-0420110012345', status: 'verified', confidence: 99 },
-      { fieldName: 'Date of Birth', value: '15/08/1990', status: 'verified', confidence: 96 },
-      { fieldName: 'Vehicle Class', value: 'MCWG / LMV (Motorcycle + Light Motor Vehicle)', status: 'verified', confidence: 95 },
-      { fieldName: 'Parivahan Checksum', value: 'PASSED (State RTO Code Verified)', status: 'verified', confidence: 100 }
-    ];
-    validationChecks = [
-      { id: 'c1', name: 'Parivahan DL Structure', category: 'Structural', status: 'pass', details: 'Valid state RTO code and license series verified', score: 97 },
-      { id: 'c2', name: 'State Transport Checksum', category: 'Algorithmic', status: 'pass', details: 'Valid Parivahan check structure', score: 98 }
-    ];
-  } else {
-    // Aadhaar Default
-    docTitle = 'Aadhaar Card (UIDAI Standard)';
-    extractedFields = [
-      { fieldName: 'Document Type', value: 'AADHAAR CARD (UIDAI)', status: 'verified', confidence: 99 },
-      { fieldName: 'Full Name', value: 'Yuvraj Atri', status: 'verified', confidence: 96 },
-      { fieldName: 'AADHAAR Number', value: '2663 4813 2551', status: 'verified', confidence: 99 },
-      { fieldName: 'Date of Birth', value: '04/03/2008', status: 'verified', confidence: 97 },
-      { fieldName: 'Gender', value: 'MALE', status: 'verified', confidence: 98 },
-      { fieldName: 'Issue Date', value: '02/05/2017', status: 'verified', confidence: 95 },
-      { fieldName: 'Verhoeff D8 Checksum', value: 'PASSED (Valid UIDAI Algorithmic Checksum)', status: 'verified', confidence: 100 }
-    ];
-    validationChecks = [
-      { id: 'c1', name: 'UIDAI Guilloche Pattern & Structure', category: 'Structural', status: 'pass', details: 'Valid Indian national identity card layout verified', score: 96 },
-      { id: 'c2', name: 'Verhoeff Dihedral D8 Checksum', category: 'Algorithmic', status: 'pass', details: 'Dihedral permutation checksum verified for 12-digit UID', score: 100 },
-      { id: 'c3', name: '1:1 Live Biometric Facial Matching', category: 'Biometric', status: 'pass', details: 'Document portrait matches live passenger with 90% closeness', score: 90 },
-      { id: 'c4', name: 'Error Level Analysis (ELA)', category: 'Forensic', status: 'pass', details: 'Uniform JPEG compression map across document canvas', score: 93 }
-    ];
-  }
-
-  // --- Unverified / Offline Fallback (Never returns false positive 90% score) ---
   return {
-    authenticityScore: 25,
+    authenticityScore: 0,
     verdict: 'SUSPICIOUS',
-    verdictDescription: 'Cloud AI Screening Engine unreachable. Please ensure the Python backend at https://sih-sentinel-backend.onrender.com is running and retry.',
+    verdictDescription: errorMsg || 'Cloud AI Screening Engine is starting or unreachable. Please ensure the Python backend at https://sih-sentinel-backend.onrender.com is awake and retry.',
     processingTimeMs: 1250,
-    documentType: 'Unverified Scan Ingestion',
-    confidence: 0.25,
+    documentType: 'Unverified Document Scan',
+    confidence: 0.0,
     boundingBoxes: [
       {
         id: 'b1',
-        label: 'Unverified Canvas',
+        label: 'Backend Offline / Latency',
         type: 'critical',
         x: 10,
-        y: 25,
+        y: 20,
         width: 80,
-        height: 50,
-        description: 'Live server OCR & checksum verification could not be executed.',
-        confidence: 0.25
+        height: 60,
+        description: errorMsg || 'Live Python AI screening server (EasyOCR + SFace + ELA) did not respond in time.',
+        confidence: 0.0
       }
     ],
     extractedFields: [
-      { fieldName: 'Backend Connection', value: 'Offline / Network Latency', status: 'flagged', confidence: 10, anomalyDetails: 'Direct connection to Python AI backend interrupted.' },
-      { fieldName: 'Document Source', value: docFile.name || 'Uploaded File', status: 'warning', confidence: 50 },
-      { fieldName: 'Verification Verdict', value: 'UNVERIFIED (Requires Live Server)', status: 'flagged', confidence: 20 }
+      { fieldName: 'Backend Connection', value: 'DISCONNECTED / TIMEOUT', status: 'flagged', confidence: 0, anomalyDetails: 'Direct connection to Python AI backend failed.' },
+      { fieldName: 'Document Name', value: docFile.name || 'Uploaded File', status: 'warning', confidence: 50 },
+      { fieldName: 'Verification Verdict', value: 'UNVERIFIED (Requires Live Server)', status: 'flagged', confidence: 0 }
     ],
     validationChecks: [
       { id: 'c1', name: 'Server Connectivity', category: 'Forensic', status: 'fail', details: 'Unable to reach live FastAPI backend for neural OCR extraction', score: 0 },
@@ -562,9 +475,9 @@ async function generateClientFallbackResult(docFile: File, liveFaceFile: File | 
     ],
     biometricResult: docCropBase64 ? {
       isMatch: false,
-      matchScore: 30,
-      cosineSimilarity: 0.30,
-      livenessScore: 40,
+      matchScore: 0,
+      cosineSimilarity: 0.0,
+      livenessScore: 0,
       livenessStatus: 'SKIPPED',
       isLivePerson: false,
       verdict: 'UNVERIFIED',
@@ -574,8 +487,8 @@ async function generateClientFallbackResult(docFile: File, liveFaceFile: File | 
     } : undefined,
     forensicTrace: [
       `Ingested file: ${docFile.name} (${(docFile.size / 1024).toFixed(1)} KB).`,
-      'Failed to receive response from cloud backend.',
-      'Manual retry recommended.'
+      'Failed to receive response from cloud backend (Render cold-start or network latency).',
+      'Please retry after 30 seconds once the cloud backend is warmed up.'
     ],
     blockchainAnchor: {
       verdictHash: `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`,
@@ -584,14 +497,14 @@ async function generateClientFallbackResult(docFile: File, liveFaceFile: File | 
       network: 'Polygon PoS (Amoy Testnet - EVM)',
       explorerUrl: `https://amoy.polygonscan.com/tx/0x${Math.random().toString(16).slice(2)}`,
       timestampIso: new Date().toISOString(),
-      status: 'CONFIRMED_ON_CHAIN',
+      status: 'UNVERIFIED',
       previousBlockHash: '0x12a8f9c0b1154c13a00c14b2d56a798fe8d904b73e89547d6c6e7a2b9c0d1e2f',
       merkleRoot: '0x6fbc268d87a4128f73b64f9b8c0df1d8591e988220c35f2a1a8c3d9051d95392',
       nonPiiDigestPreview: {
         agency: 'Ministry of Home Affairs - PS26188',
         doc_type: 'Unverified Document',
         verdict: 'SUSPICIOUS',
-        authenticity_score: 25,
+        authenticity_score: 0,
         checksum_passed: false
       }
     }
@@ -613,44 +526,43 @@ async function analyzeDocumentWithBiometrics(
   const readyDocFile = await compressImageForScreening(docFileInput as File, 1200);
   const readyLiveFace = liveFaceInput ? await compressImageForScreening(liveFaceInput, 800) : null;
 
-  // Live File Upload -> Send to FastAPI Backend
-  const formData = new FormData();
-  formData.append('file', readyDocFile);
-  if (readyLiveFace) {
-    formData.append('live_face', readyLiveFace);
-  }
-
   const baseUrls = getCandidateBaseUrls();
   let response: Response | null = null;
+  let lastErrorMessage = '';
 
-  // Race all available backends with 75s timeout to handle cloud server cold starts and complete 5-stage OpenCV + OCR + YuNet execution
-  const fetchPromises = baseUrls.map(async (baseUrl) => {
+  for (const baseUrl of baseUrls) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 75000);
+    const timer = setTimeout(() => controller.abort(), 70000);
     try {
+      const formData = new FormData();
+      formData.append('file', readyDocFile);
+      if (readyLiveFace) {
+        formData.append('live_face', readyLiveFace);
+      }
+      console.log(`[Screening Engine] Connecting to ${baseUrl}/extract-and-validate...`);
       const res = await fetch(`${baseUrl}/extract-and-validate`, {
         method: 'POST',
         body: formData,
         signal: controller.signal,
       });
       clearTimeout(timer);
-      if (res && res.ok) return res;
-      throw new Error(`HTTP ${res?.status || 'failed'}`);
-    } catch (e) {
+      if (res && res.ok) {
+        response = res;
+        console.log(`[Screening Engine] Successfully received response from ${baseUrl}`);
+        break;
+      } else {
+        lastErrorMessage = `HTTP ${res?.status || 'unknown'}: ${res?.statusText || 'request failed'}`;
+        console.warn(`[Screening Engine] ${baseUrl} returned non-ok status:`, res?.status);
+      }
+    } catch (e: any) {
       clearTimeout(timer);
-      throw e;
+      lastErrorMessage = e?.message || String(e);
+      console.warn(`[Screening Engine] Connection failed for ${baseUrl}:`, e);
     }
-  });
-
-  try {
-    response = await Promise.any(fetchPromises);
-  } catch {
-    response = null;
   }
 
   if (!response || !response.ok) {
-    // Instant smart client-side multi-document forensic analyzer (Zero blocking alerts, <50ms)
-    return await generateClientFallbackResult(readyDocFile, readyLiveFace);
+    return await generateClientFallbackResult(readyDocFile, readyLiveFace, lastErrorMessage);
   }
 
   const data = await response.json();
