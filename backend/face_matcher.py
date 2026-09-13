@@ -169,18 +169,11 @@ def detect_face(img_bgr: np.ndarray) -> Optional[Dict[str, Any]]:
                     face_crop = img_bgr[crop_y1:crop_y2, crop_x1:crop_x2]
                     conf = float(best_face[14])
 
-                    scaled_vec = np.array(best_face, copy=True)
-                    scaled_vec[0] *= inv_scale
-                    scaled_vec[1] *= inv_scale
-                    scaled_vec[2] *= inv_scale
-                    scaled_vec[3] *= inv_scale
-                    for li in range(4, 14):
-                        scaled_vec[li] *= inv_scale
-
                     return {
                         "box": (fx, fy, fw, fh),
                         "crop": face_crop,
-                        "raw_face_vector": scaled_vec,
+                        "raw_face_vector": np.ascontiguousarray(best_face, dtype=np.float32),
+                        "work_img": work_img,
                         "confidence": round(conf * 100, 1),
                         "detector": "yunet"
                     }
@@ -330,18 +323,33 @@ def _extract_face_feature_vector(img_bgr: np.ndarray, face_info: Dict[str, Any])
     """
     sface = _get_sface_recognizer()
     raw_vec = face_info.get("raw_face_vector")
+    work_img = face_info.get("work_img")
+    target_img = work_img if work_img is not None else img_bgr
 
-    # 1. SFace deep feature extractor
-    if sface is not None and raw_vec is not None:
+    # 1. SFace deep feature extractor via aligned crop
+    if sface is not None and raw_vec is not None and target_img is not None:
         try:
-            aligned_face = sface.alignCrop(img_bgr, raw_vec)
-            feature = sface.feature(aligned_face)
-            return feature
+            vec_f32 = np.ascontiguousarray(raw_vec, dtype=np.float32)
+            aligned_face = sface.alignCrop(target_img, vec_f32)
+            if aligned_face is not None and aligned_face.shape[:2] == (112, 112):
+                feature = sface.feature(aligned_face)
+                if feature is not None:
+                    return feature
         except Exception as e:
-            logger.warning(f"SFace feature extraction failed: {e}")
+            logger.warning(f"SFace alignCrop feature extraction failed: {e}")
 
-    # 2. Fallback: Standardized Multi-Zone Color & Texture Descriptor
+    # 2. SFace direct crop feature extractor (for Haar cascade or cropped faces)
     crop = face_info.get("crop")
+    if sface is not None and crop is not None and crop.size > 0:
+        try:
+            aligned_face = cv2.resize(crop, (112, 112), interpolation=cv2.INTER_AREA)
+            feature = sface.feature(aligned_face)
+            if feature is not None:
+                return feature
+        except Exception as e:
+            logger.warning(f"SFace direct crop feature extraction failed: {e}")
+
+    # 3. Fallback: Standardized Multi-Zone Color & Texture Descriptor
     if crop is not None and crop.size > 0:
         try:
             resized = cv2.resize(crop, (112, 112), interpolation=cv2.INTER_AREA)

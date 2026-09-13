@@ -162,9 +162,9 @@ def predict_screening_image(image_bytes: bytes, model_path: str = MODEL_PATH, im
         }
     except Exception as e:
         return {
-            "predicted_label": "authentic_document",
-            "confidence": 0.90,
-            "class_scores": {"authentic_document": 0.90, "tampered_document": 0.10, "live_face": 0.90, "spoof_face": 0.10},
-            "is_safe": True,
+            "predicted_label": "tampered_document",
+            "confidence": 0.0,
+            "class_scores": {"authentic_document": 0.0, "tampered_document": 1.0, "live_face": 0.0, "spoof_face": 1.0},
+            "is_safe": False,
             "details": f"Screening evaluation notice: {str(e)}"
         }
