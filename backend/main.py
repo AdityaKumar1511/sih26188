@@ -1,8 +1,27 @@
+import os
 import time
 import io
 import logging
 import asyncio
 from typing import Dict, Any, List, Optional, Tuple
+
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
+try:
+    import cv2
+    cv2.setNumThreads(1)
+except Exception:
+    pass
+
+try:
+    import torch
+    torch.set_num_threads(1)
+except Exception:
+    pass
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
