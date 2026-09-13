@@ -277,8 +277,9 @@ _NOISE_KEYWORDS = frozenset([
     "PASSPORT", "REPUBLIC", "NATIONALITY", "INDIAN", "HYDERABAD",
     "SURNAME", "GIVEN", "NAME", "NAMES", "SEX", "CODE", "TYPE",
     "COUNTRY", "PASSEPORT", "MINISTRY", "EXTERNAL", "AFFAIRS",
-    "REGIONAL", "OFFICE", "OFFICER", "ASSISTANT", "FILE", "NO",
-    "SAMPLE", "SPECIMEN", "WATERMARK", "IMMIHELP", "IMMIHELP.COM",
+    "REGIONAL", "OFFICE", "OFFICER", "ASSISTANT", "FILE", "NO", "NUMBER", "NUMBERS",
+    "NUM", "CARD", "CARDS", "OVERLAY", "OVERLAYS", "VERIFIED", "SCREENING", "DATABASE", "DOCUMENT",
+    "CANVAS", "SAMPLE", "SPECIMEN", "WATERMARK", "IMMIHELP", "IMMIHELP.COM",
     "SHUTTERSTOCK", "GETTY", "ALAMY", "DEPOSITPHOTOS", "DREAMSTIME",
     "STOCK", "PHOTO", "PREVIEW", "DEMO", "ILLUSTRATION", "VECTOR"
 ])
@@ -357,6 +358,21 @@ def _is_garbage_or_ocr_artifact(word: str) -> bool:
     return False
 
 
+_COMMON_INDIAN_NAME_TOKENS = frozenset([
+    "KUMAR", "SINGH", "SHARMA", "VERMA", "GUPTA", "ATRI", "PATEL", "YADAV", "MISHRA", "DAS",
+    "ROY", "KAUR", "DEVI", "LAL", "PRASAD", "SHAH", "JAIN", "MALHOTRA", "RAO", "REDDY",
+    "NAIR", "IYER", "MENON", "PILLAI", "BOSE", "BANERJEE", "CHATTERJEE", "MUKHERJEE", "SENGUPTA",
+    "GHOSH", "DUTTA", "BHATTACHARYA", "MEHTA", "JOSHI", "PANDEY", "TIWARI", "TRIPATHI", "DUBEY",
+    "SHUKLA", "SRIVASTAVA", "SAXENA", "BHATIA", "KHATRI", "ARORA", "BANSAL", "GARG", "SINGHAL",
+    "MITTAL", "AGARWAL", "AGGARWAL", "GOEL", "GOYAL", "CHAUHAN", "RATHORE", "TOMAR", "SOLANKI",
+    "PAWAR", "SHINDE", "MORE", "KADAM", "JADHAV", "PATIL", "DESHMUKH", "KULKARNI", "KAMAT",
+    "PAI", "BHAT", "HEGDE", "SHETTY", "RAI", "POOJARY", "NAIK", "GOWDA", "SHEKHAR", "PRAKASH",
+    "CHANDRA", "MOHAN", "SUNDER", "RAJAN", "MANI", "SWAMY", "NATHAN", "KRISHNAN", "NARAYANAN",
+    "RAMACHANDRAN", "SUBRAMANIAN", "VENKATESH", "SRINIVASAN", "RAGHAVAN", "ANAND", "MURTHY",
+    "ADITYA", "YUVRAJ", "RAHUL", "AMIT", "MANISH", "VIKRAM", "PRIYA", "POOJA", "NEHA", "ANITA"
+])
+
+
 def _score_name_candidate(name: str) -> int:
     """Scores candidate name plausibility."""
     if not name or len(name) < 3 or _is_header_or_noise(name):
@@ -364,6 +380,13 @@ def _score_name_candidate(name: str) -> int:
     words = name.split()
     if not words or len(words) > 5:
         return 0
+
+    # If candidate ends with common field suffixes like 'Number' or 'Card', strip or reject
+    if words[-1].upper() in ("NUMBER", "CARD", "OVERLAYS", "VERIFIED", "SCREENING", "DATABASE", "ENROLMENT"):
+        words = words[:-1]
+        if not words:
+            return 0
+        name = " ".join(words)
 
     # If any word in candidate is garbage artifact, reject candidate completely
     for w in words:
@@ -376,7 +399,7 @@ def _score_name_candidate(name: str) -> int:
 
     score = 0
     if len(words) == 2:
-        score += 80  # Standard Firstname Lastname (e.g. Yuvraj Atri)
+        score += 90  # Standard Firstname Lastname (e.g. Aditya Kumar, Yuvraj Atri)
     elif len(words) == 3:
         score += 70  # Firstname Middlename Lastname
     elif len(words) == 1 and len(name) >= 4:
@@ -384,11 +407,16 @@ def _score_name_candidate(name: str) -> int:
     else:
         score += 10
 
-    # Bonus for clean English Title Casing (e.g. "Yuvraj Atri")
+    # Bonus for clean English Title Casing (e.g. "Aditya Kumar", "Yuvraj Atri")
     if re.match(r'^[A-Z][a-z]+\s+[A-Z][a-z]+$', name):
-        score += 60
+        score += 70
     elif re.match(r'^[A-Z]{3,}\s+[A-Z]{3,}$', name):
         score += 45
+
+    # Lexicon boost for verified Indian naming tokens
+    for w in words:
+        if w.upper() in _COMMON_INDIAN_NAME_TOKENS:
+            score += 60
 
     avg_len = sum(len(w) for w in words) / len(words)
     if avg_len >= 3.5:
@@ -405,7 +433,7 @@ def _extract_best_name(lines: List[str], dob_line_idx: int, all_texts: List[str]
     from collections import Counter
     candidates: List[Tuple[str, int]] = []
 
-    # 1. Line immediately before DOB (strongest Aadhaar signal: name sits 1 or 2 lines above DOB)
+    # 1. Line immediately before DOB (strongest Aadhaar signal: English name sits 1 line above DOB, Hindi sits 2 lines above)
     if dob_line_idx > 0:
         for offset in [1, 2, 3]:
             idx = dob_line_idx - offset
@@ -416,8 +444,8 @@ def _extract_best_name(lines: List[str], dob_line_idx: int, all_texts: List[str]
                     if name and not _is_header_or_noise(name):
                         s = _score_name_candidate(name)
                         if s > 0:
-                            # Higher bonus for the line directly above DOB
-                            bonus = 100 if offset == 1 else (75 if offset == 2 else 40)
+                            # Highest priority for Offset 1 (adjacent English name line)
+                            bonus = 250 if offset == 1 else (50 if offset == 2 else 20)
                             candidates.append((name, s + bonus))
 
     # 2. Lines following explicit Name / Given Name labels
@@ -429,7 +457,7 @@ def _extract_best_name(lines: List[str], dob_line_idx: int, all_texts: List[str]
             if cand_inline and not _is_header_or_noise(cand_inline):
                 s_inline = _score_name_candidate(cand_inline)
                 if s_inline > 0:
-                    candidates.append((cand_inline, s_inline + 60))
+                    candidates.append((cand_inline, s_inline + 100))
 
         if re.search(r'\b(GIVEN\s*NAME|GIVEN\s*NAMES|NAME|FULL\s*NAME|नाम)\b', upper):
             if i + 1 < len(lines):
@@ -439,7 +467,7 @@ def _extract_best_name(lines: List[str], dob_line_idx: int, all_texts: List[str]
                     if name and not _is_header_or_noise(name):
                         s = _score_name_candidate(name)
                         if s > 0:
-                            candidates.append((name, s + 50))
+                            candidates.append((name, s + 80))
 
     # 3. Consensus across all OCR passes
     pass_candidates = []
@@ -450,7 +478,7 @@ def _extract_best_name(lines: List[str], dob_line_idx: int, all_texts: List[str]
                 name = _clean_name_candidate(l_clean)
                 if name and not _is_header_or_noise(name):
                     s = _score_name_candidate(name)
-                    if s >= 40:
+                    if s >= 50:
                         pass_candidates.append(name)
                         candidates.append((name, s))
 
@@ -628,13 +656,26 @@ def _parse_dob(all_text: str) -> Tuple[Optional[str], Optional[str], Optional[st
     expiry_val = None
     issue_val = None
 
+    def _clean_and_validate_dmy(day_str: str, mon_str: str, yr_str: str) -> Optional[str]:
+        try:
+            d = int(day_str)
+            m = int(mon_str)
+            y = int(yr_str)
+            if d > 31 and day_str.startswith('3'):
+                d = int('1' + day_str[1:])
+            if 1 <= d <= 31 and 1 <= m <= 12 and 1900 <= y <= 2099:
+                return f"{str(d).zfill(2)}/{str(m).zfill(2)}/{y}"
+        except Exception:
+            pass
+        return None
+
     # 1. Labeled Date of Birth extraction
     dob_labeled = re.search(r'(?:DOB|DATE\s*OF\s*BIRTH|FECHA\s*DE\s*NACIMIENTO|FECHA\s*NACIMIENTO|जन्म\s*तिथि|जन्म\s*तारीख)\s*[:\/\-\s]*([0-3]?[0-9][\/\-\.][01]?[0-9][\/\-\.](?:19|20)\d\d)', all_text, re.IGNORECASE)
     if dob_labeled:
         raw_d = dob_labeled.group(1).replace('-', '/').replace('.', '/')
         p = raw_d.split('/')
         if len(p) == 3:
-            dob_val = f"{p[0].zfill(2)}/{p[1].zfill(2)}/{p[2]}"
+            dob_val = _clean_and_validate_dmy(p[0], p[1], p[2])
 
     # 2. Labeled Expiry Date extraction
     exp_labeled = re.search(r'(?:EXPIRY|DATE\s*OF\s*EXPIRY|FECHA\s*DE\s*CADUCIDAD|FECHA\s*CADUCIDAD|VALID\s*TILL|EXP)\s*[:\/\-\s]*([0-3]?[0-9][\/\-\.][01]?[0-9][\/\-\.](?:19|20)\d\d)', all_text, re.IGNORECASE)
