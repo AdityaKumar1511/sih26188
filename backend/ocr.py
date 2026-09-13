@@ -63,7 +63,7 @@ def get_easyocr_reader() -> Any:
     if _easyocr_reader is None:
         try:
             import easyocr  # type: ignore
-            _easyocr_reader = easyocr.Reader(['en', 'hi'], gpu=False)
+            _easyocr_reader = easyocr.Reader(['en'], gpu=False)
         except Exception as e:
             logger.debug(f"EasyOCR reader init skipped or failed: {e}")
     return _easyocr_reader
