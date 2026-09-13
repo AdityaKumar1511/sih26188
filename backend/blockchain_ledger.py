@@ -25,28 +25,31 @@ LEDGER_SECRET_SALT = os.environ.get("MHA_AUDIT_SALT", "MHA_PS26188_IMMUTABLE_AUD
 
 def _ensure_ledger_file_exists():
     """Initializes the ledger directory and genesis block if not already created."""
-    os.makedirs(LEDGER_DATA_DIR, exist_ok=True)
-    if not os.path.exists(LEDGER_FILE_PATH):
-        genesis_block = {
-            "block_number": 0,
-            "timestamp": "2026-09-01T00:00:00Z",
-            "previous_block_hash": GENESIS_PREV_HASH,
-            "merkle_root": "0x6fbc268d87a4128f73b64f9b8c0df1d8591e988220c35f2a1a8c3d9051d95392",
-            "tx_count": 1,
-            "transactions": [
-                {
-                    "tx_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                    "doc_type": "SYSTEM_GENESIS",
-                    "verdict": "GENESIS_INITIALIZED",
-                    "verdict_hash": "0x6fbc268d87a4128f73b64f9b8c0df1d8591e988220c35f2a1a8c3d9051d95392",
-                    "authenticity_score": 100,
-                    "timestamp": "2026-09-01T00:00:00Z"
-                }
-            ],
-            "block_hash": "0x12a8f9c0b1154c13a00c14b2d56a798fe8d904b73e89547d6c6e7a2b9c0d1e2f"
-        }
-        with open(LEDGER_FILE_PATH, "w", encoding="utf-8") as f:
-            json.dump([genesis_block], f, indent=2)
+    try:
+        os.makedirs(LEDGER_DATA_DIR, exist_ok=True)
+        if not os.path.exists(LEDGER_FILE_PATH):
+            genesis_block = {
+                "block_number": 0,
+                "timestamp": "2026-09-01T00:00:00Z",
+                "previous_block_hash": GENESIS_PREV_HASH,
+                "merkle_root": "0x6fbc268d87a4128f73b64f9b8c0df1d8591e988220c35f2a1a8c3d9051d95392",
+                "tx_count": 1,
+                "transactions": [
+                    {
+                        "tx_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                        "doc_type": "SYSTEM_GENESIS",
+                        "verdict": "GENESIS_INITIALIZED",
+                        "verdict_hash": "0x6fbc268d87a4128f73b64f9b8c0df1d8591e988220c35f2a1a8c3d9051d95392",
+                        "authenticity_score": 100,
+                        "timestamp": "2026-09-01T00:00:00Z"
+                    }
+                ],
+                "block_hash": "0x12a8f9c0b1154c13a00c14b2d56a798fe8d904b73e89547d6c6e7a2b9c0d1e2f"
+            }
+            with open(LEDGER_FILE_PATH, "w", encoding="utf-8") as f:
+                json.dump([genesis_block], f, indent=2)
+    except Exception:
+        pass
 
 
 def generate_zero_pii_verdict_digest(
