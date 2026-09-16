@@ -545,6 +545,9 @@ async function analyzeDocumentWithBiometrics(
     try {
       const formData = new FormData();
       formData.append('file', readyDocFile);
+      if (readyLiveFace) {
+        formData.append('live_face', readyLiveFace);
+      }
       console.log(`[Screening Engine] Connecting to ${baseUrl}/extract-and-validate...`);
       const res = await fetch(`${baseUrl}/extract-and-validate`, {
         method: 'POST',
@@ -573,8 +576,8 @@ async function analyzeDocumentWithBiometrics(
 
   const data = await response.json();
 
-  // If live selfie capture was provided, execute dedicated 1:1 SFace biometric verification
-  if (readyLiveFace) {
+  // If live selfie capture was provided and biometric verification wasn't already returned
+  if (readyLiveFace && !data.biometric_verification) {
     try {
       const matchFormData = new FormData();
       matchFormData.append('document_image', readyDocFile);

@@ -767,6 +767,39 @@ async def get_blockchain_ledger_blocks_endpoint(limit: int = 15):
     }
 
 
+@app.post("/match-face")
+@app.post("/match-face/")
+async def match_face_endpoint(
+    document_image: UploadFile = File(...),
+    live_face_image: UploadFile = File(...)
+):
+    """
+    Dedicated 1:1 Biometric SFace Face Matching & Passive Liveness Verification endpoint.
+    """
+    try:
+        doc_bytes = await document_image.read()
+        live_bytes = await live_face_image.read()
+        result = await asyncio.to_thread(match_faces_1to1, doc_bytes, live_bytes)
+        return JSONResponse(content=result)
+    except Exception as e:
+        logger.error(f"Match face error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "is_match": False,
+                "match_score": 0,
+                "cosine_similarity": 0.0,
+                "liveness_score": 0,
+                "liveness_status": "ERROR",
+                "is_live_person": False,
+                "verdict": "ERROR",
+                "verdict_description": f"Facial matching failed: {str(e)}",
+                "forensic_trace": [f"Biometric engine error: {str(e)}"]
+            }
+        )
+
+
 @app.post("/generate-audit-report")
 @app.post("/generate-audit-report/")
 async def generate_audit_report_endpoint(screening_data: Dict[str, Any]):
