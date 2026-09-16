@@ -538,6 +538,16 @@ async def extract_and_validate(
             confidence=confidences.get("issue_date", 85)
         ))
 
+    # Address (if available from Aadhaar back/front or QR payload)
+    address = parsed_fields.get("address") or (qr_res.get("parsed_data", {}).get("address") if qr_res else None)
+    if address:
+        extracted_items.append(ExtractedFieldItem(
+            field_name="Address",
+            value=address,
+            status="verified",
+            confidence=confidences.get("address", 85)
+        ))
+
     if not extracted_items:
         extracted_items.append(ExtractedFieldItem(
             field_name="Scan Quality",

@@ -1046,6 +1046,17 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
                 if extracted["name"]:
                     break
 
+    # Relative / Father / Guardian Name for Aadhaar
+    if doc_type == "AADHAAR" and not extracted["father_name"]:
+        for i, line in enumerate(lines):
+            rel_m = re.search(r'\b(?:S/O|D/O|W/O|C/O|SO|DO|WO|CO|CARE\s*OF|SON\s*OF|DAUGHTER\s*OF|WIFE\s*OF|आत्मज|सुपुत्र|सुपुत्री|पति)\s*[:\-]?\s*(.+)', line, re.IGNORECASE)
+            if rel_m and len(rel_m.group(1).strip()) >= 3:
+                pot_rel = _clean_name_candidate(rel_m.group(1))
+                if pot_rel and len(pot_rel) >= 3 and not _is_header_or_noise(pot_rel):
+                    extracted["father_name"] = pot_rel.upper()
+                    extracted["confidence_scores"]["father_name"] = 90
+                    break
+
     # General Name extraction fallback (for Aadhaar or generic cards)
     if not extracted["name"]:
         best_name, _ = _extract_best_name(lines, dob_line_idx, all_texts)
