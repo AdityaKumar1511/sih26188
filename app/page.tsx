@@ -349,14 +349,15 @@ function getCandidateBaseUrls(): string[] {
     const host = window.location.hostname;
     if (host === 'localhost' || host === '127.0.0.1') {
       list.push('http://127.0.0.1:8000');
+      list.push('http://localhost:8000');
     }
   }
   list.push('/api/backend');
   if (envUrl) {
     list.push(envUrl);
   }
-  list.push('https://sih26188-naq6.onrender.com');
   list.push('https://sih-sentinel-backend.onrender.com');
+  list.push('https://sih26188-naq6.onrender.com');
   return Array.from(new Set(list));
 }
 

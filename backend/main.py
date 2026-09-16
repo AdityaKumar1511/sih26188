@@ -259,6 +259,7 @@ async def extract_and_validate(
             logger.warning(f"CNN live prediction failed: {e}")
             cnn_live_result = None
 
+    face_match_res = None
     gc.collect()
 
     doc_type = parsed_fields.get("doc_type", "UNKNOWN")
