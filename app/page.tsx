@@ -943,12 +943,26 @@ export default function DocumentScreeningApp() {
   useEffect(() => {
     if (isCameraActive && videoRef.current && mediaStreamRef.current) {
       videoRef.current.srcObject = mediaStreamRef.current;
-      videoRef.current.play().catch((err) => console.error('Video play error:', err));
+      videoRef.current.onloadedmetadata = () => {
+        videoRef.current?.play().catch((err) => console.log('Video play caught:', err));
+      };
+      videoRef.current.play().catch(() => {});
     }
   }, [isCameraActive]);
 
   // Clean up object URLs and camera on unmount
   useEffect(() => {
+    // Pre-warm candidate backends on page mount
+    const prewarm = () => {
+      try {
+        const urls = getCandidateBaseUrls();
+        for (const u of urls) {
+          fetch(`${u}/health`, { method: 'GET', cache: 'no-store' }).catch(() => {});
+        }
+      } catch {}
+    };
+    prewarm();
+
     return () => {
       if (imagePreviewUrl && imagePreviewUrl.startsWith('blob:')) URL.revokeObjectURL(imagePreviewUrl);
       if (liveFacePreviewUrl && liveFacePreviewUrl.startsWith('blob:')) URL.revokeObjectURL(liveFacePreviewUrl);
@@ -959,16 +973,44 @@ export default function DocumentScreeningApp() {
   // Camera Management
   const startCamera = async () => {
     setCameraError(null);
+    if (typeof window === 'undefined' || !navigator?.mediaDevices?.getUserMedia) {
+      setCameraError('Webcam API is not supported in this browser or blocked by insecure context. Use https:// or http://localhost:3000.');
+      return;
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
-        audio: false
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+          audio: false
+        });
+      } catch (e1) {
+        // Fallback for external USB webcams or devices that reject facingMode constraints
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+      }
+
       mediaStreamRef.current = stream;
       setIsCameraActive(true);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch((err) => console.log('Auto-play error:', err));
+        };
+      }
     } catch (err: any) {
       console.error('Camera access error:', err);
-      setCameraError('Webcam access was denied or not available. You can upload a passenger photo instead.');
+      let msg = 'Webcam access was denied or not available. You can upload a passenger photo instead.';
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        msg = 'Camera permission was denied. Please allow camera access in your browser site settings.';
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        msg = 'Webcam is currently in use by another application (e.g. Zoom, Teams, or Windows Camera).';
+      }
+      setCameraError(msg);
       setIsCameraActive(false);
     }
   };
@@ -1366,6 +1408,7 @@ export default function DocumentScreeningApp() {
                     <div className="relative w-full h-48 bg-black flex items-center justify-center">
                       <video
                         ref={videoRef}
+                        autoPlay
                         playsInline
                         muted
                         className="w-full h-full object-cover rounded-lg transform -scale-x-100"

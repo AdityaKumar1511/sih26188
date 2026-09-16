@@ -74,9 +74,9 @@ MOCK_REGISTRY = [
     },
     {
         "doc_type": "AADHAAR",
-        "id_number": "266348132551",
-        "full_name": "YUVRAJ ATRI",
-        "dob": "2008-03-04",
+        "id_number": "784512963012",
+        "full_name": "ROHIT KUMAR",
+        "dob": "1994-07-15",
         "gender": "MALE",
         "status": "ACTIVE",
         "issuer": "UIDAI"

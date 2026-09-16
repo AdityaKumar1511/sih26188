@@ -1,0 +1,18 @@
+﻿name: Keep Render Backend Awake 24/7
+
+on:
+  schedule:
+    # Run every 10 minutes
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Primary Render Backend
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" https://sih26188-naq6.onrender.com/health || true
+      - name: Ping Secondary Render Backend
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" https://sih-sentinel-backend.onrender.com/health || true

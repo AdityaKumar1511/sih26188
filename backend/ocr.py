@@ -169,35 +169,55 @@ def perform_ocr(image_bytes: bytes) -> Dict[str, Any]:
 
     if pytesseract is not None:
         try:
-            # Single-pass image_to_data extraction with strict 6s timeout
+            # 1. Primary structured data extraction
             data_dict = pytesseract.image_to_data(target_pil, output_type=pytesseract.Output.DICT, config='--psm 3', timeout=6)
-            lines_map: Dict[int, List[str]] = {}
+            lines_map: Dict[Tuple[int, int, int], List[Tuple[int, str]]] = {}
+            line_y_coords: Dict[Tuple[int, int, int], int] = {}
 
             for i in range(len(data_dict['text'])):
                 t = data_dict['text'][i].strip()
-                conf = int(data_dict['conf'][i])
-                line_num = data_dict['line_num'][i]
-                
+                conf = int(data_dict.get('conf', [0])[i])
+                block_num = data_dict.get('block_num', [0])[i]
+                par_num = data_dict.get('par_num', [0])[i]
+                line_num = data_dict.get('line_num', [0])[i]
+                left = data_dict.get('left', [0])[i]
+                top = data_dict.get('top', [0])[i]
+
                 if t:
-                    if line_num not in lines_map:
-                        lines_map[line_num] = []
-                    lines_map[line_num].append(t)
-                    
+                    key = (block_num, par_num, line_num)
+                    if key not in lines_map:
+                        lines_map[key] = []
+                        line_y_coords[key] = top
+                    lines_map[key].append((left, t))
+
                     if conf > 15:
                         ocr_data.append({
                             "text": t,
                             "conf": conf,
-                            "left": data_dict['left'][i],
-                            "top": data_dict['top'][i],
+                            "left": left,
+                            "top": top,
                             "width": data_dict['width'][i],
                             "height": data_dict['height'][i]
                         })
 
-            sorted_lines = [ " ".join(lines_map[k]) for k in sorted(lines_map.keys()) ]
+            # Sort lines top-to-bottom by vertical coordinate, and words left-to-right by horizontal coordinate
+            sorted_line_keys = sorted(lines_map.keys(), key=lambda k: line_y_coords.get(k, 0))
+            sorted_lines = [
+                " ".join(word for _, word in sorted(lines_map[k], key=lambda item: item[0]))
+                for k in sorted_line_keys
+            ]
             best_text = "\n".join(sorted_lines).strip()
             if best_text:
                 all_texts.append(best_text)
                 engine_used = "tesseract"
+
+            # 2. Complementary PSM 6 pass for uniform lines (captures name & MRZ with high accuracy)
+            try:
+                psm6_text = pytesseract.image_to_string(target_pil, lang='eng', config='--psm 6', timeout=4).strip()
+                if psm6_text and psm6_text not in all_texts:
+                    all_texts.append(psm6_text)
+            except Exception:
+                pass
         except Exception as e:
             logger.warning(f"Pytesseract fast data extraction failed: {e}")
             try:
@@ -262,13 +282,14 @@ _NOISE_KEYWORDS = frozenset([
     "ENROLMENT", "ENROLLMENT", "INCOME", "TAX", "PERMANENT", "ACCOUNT",
     "DEPARTMENT", "BHARAT", "SARKAR", "VID", "VALID", "DOWNLOAD",
     "GENERATED", "LETTER", "DATE", "HELP", "WWW", "HTTP", "COM",
-    "MALE", "FEMALE", "DOB", "YEAR", "BIRTH", "SIGNATURE", "HOLDER",
+    "MALE", "FEMALE", "GENDER", "GENDERS", "SEX", "SEXO", "TRANSGENDER",
+    "DOB", "YEAR", "BIRTH", "SIGNATURE", "HOLDER",
     "FATHER", "FATHER'S", "HUSBAND", "HUSBAND'S", "MOTHER", "GUARDIAN",
     "CARE", "S/O", "D/O", "W/O", "C/O", "SO", "DO", "WO", "CO",
     "POST", "DISTRICT", "STATE", "PIN", "PINCODE", "PO", "VILLAGE",
     "ROAD", "STREET", "FLAT", "HOUSE", "BUILDING", "NAGAR", "COLONY",
     "PASSPORT", "REPUBLIC", "NATIONALITY", "INDIAN", "HYDERABAD",
-    "SURNAME", "GIVEN", "NAME", "NAMES", "SEX", "CODE", "TYPE",
+    "SURNAME", "GIVEN", "NAME", "NAMES", "CODE", "TYPE",
     "COUNTRY", "PASSEPORT", "MINISTRY", "EXTERNAL", "AFFAIRS",
     "REGIONAL", "OFFICE", "OFFICER", "ASSISTANT", "FILE", "NO", "NUMBER", "NUMBERS",
     "NUM", "CARD", "CARDS", "OVERLAY", "OVERLAYS", "VERIFIED", "SCREENING", "DATABASE", "DOCUMENT",
@@ -326,7 +347,7 @@ def _clean_name_candidate(text: str) -> str:
         w_clean = w.strip('. ')
         if len(w_clean) >= 2:
             w_upper = w_clean.upper()
-            if w_upper not in _NOISE_KEYWORDS and not any(w_upper.startswith(stem) and len(stem) >= 4 for stem in _NOISE_STEMS):
+            if w_upper not in _NOISE_KEYWORDS and not any(stem in w_upper and len(stem) >= 4 for stem in _NOISE_STEMS):
                 filtered.append(w_clean.capitalize())
         elif i == len(words) - 1 and len(w_clean) == 1 and w.endswith('.'):
             filtered.append(w)
@@ -336,24 +357,26 @@ def _clean_name_candidate(text: str) -> str:
 def _is_garbage_or_ocr_artifact(word: str) -> bool:
     """Detects OCR noise tokens and garbled Devanagari-in-English transliteration artifacts."""
     w = word.strip().upper()
-    if len(w) <= 2 and w not in {"DR", "MR", "MS", "MD", "OM", "KM", "SMT", "SH", "KU"}:
+    if len(w) <= 1:
         return True
-    # Word too long for normal Indian first/last names (typical of merged OCR Hindi artifacts like 'Seaentsitonndamee')
-    if len(w) > 13:
+    if len(w) == 2 and w not in {"DR", "MR", "MS", "MD", "OM", "KM", "SMT", "SH", "KU", "AL", "RA", "DE"}:
         return True
-    # Repeating 3+ identical characters (e.g. eee, aaa, ooo)
-    if re.search(r'([A-Z])\1\1', w):
+    # Word too long for normal Indian first/last names (typical of merged OCR artifacts like 'Seaentsitonndamee')
+    if len(w) > 18:
+        return True
+    # Repeating 4+ identical characters (e.g. eeee, aaaa)
+    if re.search(r'([A-Z])\1\1\1', w):
         return True
     # Repeating double characters (e.g. 'nddamee', 'eentsit') typical of Devanagari OCR confusion
-    if re.search(r'([A-Z])\1.*([A-Z])\2', w):
+    if re.search(r'([A-Z])\1.*([A-Z])\2.*([A-Z])\3', w):
         return True
-    # 3+ consecutive vowels or 5+ consecutive consonants
-    if re.search(r'[AEIOU]{3,}', w) or re.search(r'[^AEIOUY]{5,}', w):
+    # 4+ consecutive vowels or 6+ consecutive consonants
+    if re.search(r'[AEIOU]{4,}', w) or re.search(r'[^AEIOUY]{6,}', w):
         return True
     # Extremely abnormal vowel ratio
     vowels = sum(1 for ch in w if ch in "AEIOUY")
     ratio = vowels / len(w)
-    if ratio < 0.20 or ratio > 0.70:
+    if ratio < 0.12 or ratio > 0.85:
         return True
     return False
 
@@ -388,22 +411,26 @@ def _score_name_candidate(name: str) -> int:
             return 0
         name = " ".join(words)
 
-    # If any word in candidate is garbage artifact, reject candidate completely
+    # If any word has severe repeating artifacts, reject candidate
     for w in words:
-        if _is_garbage_or_ocr_artifact(w):
+        if re.search(r'([A-Z])\1\1\1', w.upper()) or len(w) > 18:
             return 0
 
-    # At least one word in a real name must have >= 4 characters
-    if not any(len(w) >= 4 for w in words):
+    valid_words = [w for w in words if not _is_garbage_or_ocr_artifact(w)]
+    if not valid_words:
+        return 0
+
+    # Valid names should have at least 1 word with >= 3 characters (or 2 words with >= 2 chars)
+    if not (any(len(w) >= 3 for w in valid_words) or (len(valid_words) >= 2 and all(len(w) >= 2 for w in valid_words))):
         return 0
 
     score = 0
-    if len(words) == 2:
-        score += 90  # Standard Firstname Lastname (e.g. Aditya Kumar, Yuvraj Atri)
-    elif len(words) == 3:
+    if len(valid_words) == 2:
+        score += 90  # Standard Firstname Lastname (e.g. Aditya Kumar, Yuvraj Atri, Raj Sen)
+    elif len(valid_words) == 3:
         score += 70  # Firstname Middlename Lastname
-    elif len(words) == 1 and len(name) >= 4:
-        score += 20
+    elif len(valid_words) == 1 and len(valid_words[0]) >= 3:
+        score += 30
     else:
         score += 10
 
@@ -535,16 +562,18 @@ def _repair_pan_ocr(raw_text: str) -> Optional[str]:
     """
     Detects and repairs 10-character PAN cards: 5 letters, 4 digits, 1 letter (e.g. ABCPE1234F).
     """
+    upper_sanitized = re.sub(r'[^A-Za-z0-9\s]', ' ', raw_text).upper()
+
     # 1. Exact regex match
-    match = re.search(r'\b([A-Z]{5}[0-9]{4}[A-Z])\b', raw_text.upper())
+    match = re.search(r'\b([A-Z]{5}[0-9]{4}[A-Z])\b', upper_sanitized)
     if match:
         return match.group(1)
 
     # 2. Fuzzy repair for 10-character alphanumeric tokens
     digit_to_char = {'0': 'O', '1': 'I', '2': 'Z', '5': 'S', '8': 'B'}
-    char_to_digit = {'O': '0', 'I': '1', 'l': '1', 'Z': '2', 'S': '5', 'B': '8', 'D': '0'}
+    char_to_digit = {'O': '0', 'I': '1', 'l': '1', 'L': '1', '|': '1', 'Z': '2', 'S': '5', 'B': '8', 'D': '0'}
 
-    tokens = re.findall(r'\b[A-Za-z0-9]{10}\b', raw_text)
+    tokens = re.findall(r'\b[A-Za-z0-9]{10}\b', upper_sanitized)
     for token in tokens:
         token_upper = token.upper()
         # Positions 0-4: must be letters
@@ -554,10 +583,12 @@ def _repair_pan_ocr(raw_text: str) -> Optional[str]:
         # Position 9: must be letter
         part3 = digit_to_char.get(token_upper[9], token_upper[9])
 
-        candidate = f"{part1}{part2}{part3}"
-        if re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]$', candidate):
-            if candidate[3] in "CPHFATBLJG":
-                return candidate
+    # 3. Direct sliding window over contiguous uppercase alphanumeric sequences
+    clean_no_spaces = re.sub(r'[^A-Z0-9]', '', raw_text.upper())
+    for idx in range(len(clean_no_spaces) - 9):
+        sub = clean_no_spaces[idx:idx+10]
+        if re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]$', sub) and sub[3] in "CPHFATBLJG":
+            return sub
 
     return None
 
@@ -862,10 +893,10 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
         extracted["confidence_scores"]["issue_date"] = get_real_confidence(parsed_issue, 85)
 
     # --- 4. Extract Gender ---
-    if re.search(r'\bFEMALE\b|\bSEX\s*[:/]?\s*F\b|\bSEXO\s*[:/]?\s*F\b|महिला|FEMALE/महिला|FEMALE\s*/\s*महिला|स्त्री', upper_combined):
+    if re.search(r'\bFEMALE\b|\bSEX\s*[:/]?\s*F\b|\bSEXO\s*[:/]?\s*F\b|\bGENDER\s*[:/]?\s*(?:FEMALE|F)\b|महिला|FEMALE/महिला|FEMALE\s*/\s*महिला|स्त्री', upper_combined):
         extracted["gender"] = "FEMALE"
         extracted["confidence_scores"]["gender"] = 95
-    elif re.search(r'\bMALE\b|\bSEX\s*[:/]?\s*M\b|\bSEXO\s*[:/]?\s*M\b|पुरुष|MALE/पुरुष|MALE\s*/\s*पुरुष', upper_combined):
+    elif re.search(r'\bMALE\b|\bSEX\s*[:/]?\s*M\b|\bSEXO\s*[:/]?\s*M\b|\bGENDER\s*[:/]?\s*(?:MALE|M)\b|पुरुष|MALE/पुरुष|MALE\s*/\s*पुरुष', upper_combined):
         extracted["gender"] = "MALE"
         extracted["confidence_scores"]["gender"] = 95
     elif re.search(r'\bTRANSGENDER\b|ट्रांसजेंडर', upper_combined):
@@ -985,11 +1016,18 @@ def parse_document_fields(ocr_result: Dict[str, Any]) -> Dict[str, Any]:
     elif doc_type == "PAN":
         for i, line in enumerate(lines):
             upper_l = line.upper()
-            if ("FATHER" in upper_l or "पिता" in line) and i + 1 < len(lines):
-                pot_f = _clean_name_candidate(lines[i + 1])
-                if pot_f and len(pot_f) > 3 and not _is_header_or_noise(pot_f):
-                    extracted["father_name"] = pot_f.upper()
-                    extracted["confidence_scores"]["father_name"] = 92
+            if "FATHER" in upper_l or "पिता" in line:
+                m_inline = re.search(r'(?:FATHER(?:\'?S)?\s*NAME|पिता\s*का\s*नाम|FATHER)\s*[:\-]?\s*(.+)', line, re.IGNORECASE)
+                if m_inline and len(m_inline.group(1).strip()) >= 3:
+                    pot_f = _clean_name_candidate(m_inline.group(1))
+                    if pot_f and len(pot_f) >= 3 and not _is_header_or_noise(pot_f):
+                        extracted["father_name"] = pot_f.upper()
+                        extracted["confidence_scores"]["father_name"] = 92
+                elif i + 1 < len(lines):
+                    pot_f = _clean_name_candidate(lines[i + 1])
+                    if pot_f and len(pot_f) >= 3 and not _is_header_or_noise(pot_f):
+                        extracted["father_name"] = pot_f.upper()
+                        extracted["confidence_scores"]["father_name"] = 92
 
         # Cardholder name: search line above Father's Name or under Name / नाम
         for i, line in enumerate(lines):
