@@ -4,11 +4,10 @@ export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 const BACKEND_CANDIDATES = [
-  'http://127.0.0.1:8000',
-  'http://localhost:8000',
-  process.env.NEXT_PUBLIC_API_URL,
-  'https://sih-sentinel-backend.onrender.com',
   'https://sih26188-naq6.onrender.com',
+  'https://sih-sentinel-backend.onrender.com',
+  process.env.NEXT_PUBLIC_API_URL,
+  ...(process.env.NODE_ENV === 'development' ? ['http://127.0.0.1:8000', 'http://localhost:8000'] : []),
 ].filter(Boolean) as string[];
 
 async function handleProxy(req: NextRequest, { params }: { params: { path: string[] } }) {
