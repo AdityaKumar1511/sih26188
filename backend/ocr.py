@@ -126,10 +126,10 @@ def preprocess_image(image_bytes: bytes) -> List[Tuple[str, Image.Image]]:
     open_cv_image = np.array(pil_image)
     open_cv_image = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2BGR)
 
-    # Stage 1: Scale Normalization (max 950px width for low memory)
+    # Stage 1: Scale Normalization (max 800px width for low memory and instant CPU execution)
     h, w = open_cv_image.shape[:2]
-    if w > 950:
-        scale_factor = 950.0 / w
+    if w > 800:
+        scale_factor = 800.0 / w
         open_cv_image = cv2.resize(
             open_cv_image,
             (int(w * scale_factor), int(h * scale_factor)),
@@ -154,10 +154,10 @@ def perform_ocr(image_bytes: bytes) -> Dict[str, Any]:
     raw_pil = preprocessed_images[0][1]
     deskewed_pil = next((img for label, img in preprocessed_images if label == "deskewed"), raw_pil)
 
-    # Scale to optimal OCR width (max 950px) to guarantee sub-second execution
+    # Scale to optimal OCR width (max 800px) to guarantee sub-second execution
     w, h = deskewed_pil.size
-    if w > 950:
-        scale = 950.0 / w
+    if w > 800:
+        scale = 800.0 / w
         target_pil = deskewed_pil.resize((int(w * scale), int(h * scale)), Image.Resampling.BILINEAR)
     else:
         target_pil = deskewed_pil

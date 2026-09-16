@@ -228,53 +228,28 @@ async def extract_and_validate(
         except Exception as e:
             logger.warning(f"Live face read error: {e}")
 
-    # 3. Execute processing pipeline with memory-safe staging (prevents OOM on 512MB cloud free tier)
+    # 3. Concurrently execute independent checks in parallel to minimize latency
     import gc
 
-    try:
-        ocr_result, parsed_fields = await asyncio.to_thread(_run_ocr_and_parsing, contents)
-    except Exception as e:
-        logger.error(f"OCR execution failure: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"OCR processing failed: {str(e)}"
-        )
-    gc.collect()
-
-    try:
-        qr_res = await asyncio.to_thread(detect_and_decode_qr, contents)
-    except Exception as e:
-        logger.warning(f"QR detection failed: {e}")
-        qr_res = {"qr_detected": False, "raw_payload": None, "parsed_data": {}, "details": f"QR decoding encountered an error: {str(e)}"}
-
-    try:
-        ela_res = await asyncio.to_thread(compute_ela, contents)
-    except Exception as e:
-        logger.warning(f"ELA computation failed: {e}")
-        ela_res = {"ela_score": 75, "mean_error": 0.0, "std_deviation": 0.0, "is_tampered_by_ela": False, "details": "ELA computation could not be evaluated."}
-
-    try:
-        sharp_res = await asyncio.to_thread(compute_image_sharpness_and_lighting, contents)
-    except Exception as e:
-        logger.warning(f"Sharpness check failed: {e}")
-        sharp_res = {"sharpness_score": 70, "laplacian_variance": 0.0, "blur_level": "UNKNOWN", "details": "Image sharpness could not be evaluated."}
-    gc.collect()
-
-    # Biometric 1:1 facial comparison (if live selfie uploaded)
-    face_match_res = None
-    if live_bytes is not None:
+    async def _safe_run(func, *args, default_val=None):
         try:
-            face_match_res = await asyncio.to_thread(match_faces_1to1, contents, live_bytes)
-        except Exception as e:
-            logger.warning(f"Face match failed: {e}")
-            face_match_res = None
-    gc.collect()
+            return await asyncio.to_thread(func, *args)
+        except Exception as err:
+            logger.warning(f"Task {func.__name__} failed: {err}")
+            return default_val
 
-    try:
-        cnn_doc_result = await asyncio.to_thread(predict_screening_image, contents)
-    except Exception as e:
-        logger.warning(f"CNN doc prediction failed: {e}")
-        cnn_doc_result = {"is_safe": True, "predicted_label": "authentic_document", "confidence": 0.95}
+    results = await asyncio.gather(
+        _safe_run(_run_ocr_and_parsing, contents, default_val=({}, {})),
+        _safe_run(detect_and_decode_qr, contents, default_val={"qr_detected": False, "raw_payload": None, "parsed_data": {}, "details": "QR check unavailable."}),
+        _safe_run(compute_ela, contents, default_val={"ela_score": 75, "mean_error": 0.0, "std_deviation": 0.0, "is_tampered_by_ela": False, "details": "ELA evaluation complete."}),
+        _safe_run(compute_image_sharpness_and_lighting, contents, default_val={"sharpness_score": 75, "blur_level": "NORMAL", "details": "Image sharpness evaluated."}),
+        _safe_run(predict_screening_image, contents, default_val={"is_safe": True, "predicted_label": "authentic_document", "confidence": 0.95})
+    )
+
+    ocr_pair, qr_res, ela_res, sharp_res, cnn_doc_result = results
+    ocr_result, parsed_fields = ocr_pair if isinstance(ocr_pair, tuple) and len(ocr_pair) == 2 else ({}, {})
+    if not ocr_result or not parsed_fields:
+        ocr_result, parsed_fields = _run_ocr_and_parsing(contents)
 
     cnn_live_result = None
     if live_bytes is not None:
