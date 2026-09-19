@@ -252,6 +252,7 @@ async def extract_and_validate(
         ocr_result, parsed_fields = _run_ocr_and_parsing(contents)
 
     cnn_live_result = None
+    face_match_res = None
     if live_bytes is not None:
         try:
             cnn_live_result = await asyncio.to_thread(predict_screening_image, live_bytes)
@@ -259,7 +260,12 @@ async def extract_and_validate(
             logger.warning(f"CNN live prediction failed: {e}")
             cnn_live_result = None
 
-    face_match_res = None
+        try:
+            face_match_res = await asyncio.to_thread(match_faces_1to1, contents, live_bytes)
+        except Exception as e:
+            logger.warning(f"Biometric 1:1 matching in screening failed: {e}")
+            face_match_res = None
+
     gc.collect()
 
     doc_type = parsed_fields.get("doc_type", "UNKNOWN")

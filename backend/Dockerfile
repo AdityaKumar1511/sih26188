@@ -4,6 +4,7 @@ FROM python:3.11-slim
 # Prevent Python from writing .pyc files & buffer stdout/stderr
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PORT=8000
 
 # Install system dependencies: Tesseract OCR, OpenCV runtime libraries, and language packs
 RUN apt-get update && apt-get install -y --no-install-recommends \

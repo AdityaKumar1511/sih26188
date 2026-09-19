@@ -345,6 +345,10 @@ const SAMPLE_PRESETS: SamplePreset[] = [
 function getCandidateBaseUrls(): string[] {
   const envUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '');
   const list: string[] = [];
+  if (envUrl) {
+    list.push(envUrl);
+  }
+  list.push('/api/backend');
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     if (host === 'localhost' || host === '127.0.0.1') {
@@ -352,12 +356,6 @@ function getCandidateBaseUrls(): string[] {
       list.push('http://localhost:8000');
     }
   }
-  list.push('/api/backend');
-  if (envUrl) {
-    list.push(envUrl);
-  }
-  list.push('https://sih-sentinel-backend.onrender.com');
-  list.push('https://sih26188-naq6.onrender.com');
   return Array.from(new Set(list));
 }
 
@@ -541,7 +539,7 @@ async function analyzeDocumentWithBiometrics(
 
   for (const baseUrl of baseUrls) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 70000);
+    const timer = setTimeout(() => controller.abort(), 25000);
     try {
       const formData = new FormData();
       formData.append('file', readyDocFile);
@@ -586,7 +584,7 @@ async function analyzeDocumentWithBiometrics(
       for (const baseUrl of baseUrls) {
         try {
           const matchController = new AbortController();
-          const matchTimer = setTimeout(() => matchController.abort(), 45000);
+          const matchTimer = setTimeout(() => matchController.abort(), 20000);
           const matchRes = await fetch(`${baseUrl}/match-face`, {
             method: 'POST',
             body: matchFormData,

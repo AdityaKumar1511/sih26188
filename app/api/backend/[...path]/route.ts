@@ -4,10 +4,11 @@ export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 const BACKEND_CANDIDATES = [
-  'https://sih26188-naq6.onrender.com',
-  'https://sih-sentinel-backend.onrender.com',
   process.env.NEXT_PUBLIC_API_URL,
-  ...(process.env.NODE_ENV === 'development' ? ['http://127.0.0.1:8000', 'http://localhost:8000'] : []),
+  process.env.BACKEND_INTERNAL_URL,
+  ...(process.env.NODE_ENV === 'development' || !process.env.NEXT_PUBLIC_API_URL
+    ? ['http://127.0.0.1:8000', 'http://localhost:8000']
+    : []),
 ].filter(Boolean) as string[];
 
 async function handleProxy(req: NextRequest, { params }: { params: { path: string[] } }) {
@@ -33,7 +34,7 @@ async function handleProxy(req: NextRequest, { params }: { params: { path: strin
       }
 
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 25000);
+      const timer = setTimeout(() => controller.abort(), 15000);
 
       const response = await fetch(targetUrl, {
         method: req.method,

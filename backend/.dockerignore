@@ -9,3 +9,16 @@ venv/
 .env.local
 .git
 .gitignore
+.pytest_cache/
+*.log
+
+# Exclude training datasets, scripts, and checkpoints not used in production inference
+datasets/
+train_face_document_cnn.py
+models/face_document_cnn.pth
+models/face_document_cnn_meta.json
+
+# Exclude local tests and test assets
+test_*.py
+debug_*.py
+test_crop.jpg
