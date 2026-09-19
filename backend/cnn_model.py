@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import logging
 from io import BytesIO
@@ -14,9 +16,7 @@ try:
     _TORCH_AVAILABLE = True
 except ImportError:
     torch = None
-    class nn:
-        class Module:
-            pass
+    nn = None
     _TORCH_AVAILABLE = False
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
@@ -31,97 +31,121 @@ CLASS_NAMES = [
 _MODEL_CACHE: Dict[str, Any] = {}
 
 
-class FaceDocumentCNN(nn.Module):
-    """CNN for face identity matching and document authenticity screening."""
+if _TORCH_AVAILABLE and nn is not None:
+    class FaceDocumentCNN(nn.Module):
+        """CNN for face identity matching and document authenticity screening."""
 
-    def __init__(self, input_shape: Tuple[int, int, int] = (64, 64, 3), num_classes: int = 4):
-        super().__init__()
-        self.input_shape = (None, *input_shape)
-        self.output_shape = (None, num_classes)
-        self.num_classes = num_classes
-        self.channels = input_shape[-1]
-        self.height = input_shape[0]
-        self.width = input_shape[1]
+        def __init__(self, input_shape: Tuple[int, int, int] = (64, 64, 3), num_classes: int = 4):
+            super().__init__()
+            self.input_shape = (None, *input_shape)
+            self.output_shape = (None, num_classes)
+            self.num_classes = num_classes
+            self.channels = input_shape[-1]
+            self.height = input_shape[0]
+            self.width = input_shape[1]
 
-        self.feature_extractor = nn.Sequential(
-            nn.Conv2d(self.channels, 32, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.BatchNorm2d(32),
-            nn.Conv2d(32, 32, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Dropout(0.2),
+            self.feature_extractor = nn.Sequential(
+                nn.Conv2d(self.channels, 32, kernel_size=3, padding=1),
+                nn.ReLU(),
+                nn.BatchNorm2d(32),
+                nn.Conv2d(32, 32, kernel_size=3, padding=1),
+                nn.ReLU(),
+                nn.MaxPool2d(2),
+                nn.Dropout(0.2),
 
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.BatchNorm2d(64),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Dropout(0.25),
+                nn.Conv2d(32, 64, kernel_size=3, padding=1),
+                nn.ReLU(),
+                nn.BatchNorm2d(64),
+                nn.Conv2d(64, 64, kernel_size=3, padding=1),
+                nn.ReLU(),
+                nn.MaxPool2d(2),
+                nn.Dropout(0.25),
 
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.BatchNorm2d(128),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.AdaptiveAvgPool2d((1, 1)),
-        )
+                nn.Conv2d(64, 128, kernel_size=3, padding=1),
+                nn.ReLU(),
+                nn.BatchNorm2d(128),
+                nn.Conv2d(128, 128, kernel_size=3, padding=1),
+                nn.ReLU(),
+                nn.AdaptiveAvgPool2d((1, 1)),
+            )
 
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Dropout(0.35),
-            nn.Linear(64, self.num_classes),
-        )
+            self.classifier = nn.Sequential(
+                nn.Flatten(),
+                nn.Linear(128, 64),
+                nn.ReLU(),
+                nn.Dropout(0.35),
+                nn.Linear(64, self.num_classes),
+            )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if not isinstance(x, torch.Tensor):
-            x = torch.tensor(x, dtype=torch.float32)
+        def forward(self, x: Any) -> Any:
+            if not isinstance(x, torch.Tensor):
+                x = torch.tensor(x, dtype=torch.float32)
 
-        if x.dtype != torch.float32:
-            x = x.to(torch.float32)
+            if x.dtype != torch.float32:
+                x = x.to(torch.float32)
 
-        if x.dim() == 3:
-            # (H, W, C) -> (1, C, H, W) or (C, H, W) -> (1, C, H, W)
-            if x.shape[-1] == self.channels:
-                x = x.permute(2, 0, 1).unsqueeze(0).contiguous()
-            else:
-                x = x.unsqueeze(0).contiguous()
-        elif x.dim() == 4:
-            # (B, H, W, C) -> (B, C, H, W)
-            if x.shape[-1] == self.channels and x.shape[1] != self.channels:
-                x = x.permute(0, 3, 1, 2).contiguous()
+            if x.dim() == 3:
+                if x.shape[-1] == self.channels:
+                    x = x.permute(2, 0, 1).unsqueeze(0).contiguous()
+                else:
+                    x = x.unsqueeze(0).contiguous()
+            elif x.dim() == 4:
+                if x.shape[-1] == self.channels and x.shape[1] != self.channels:
+                    x = x.permute(0, 3, 1, 2).contiguous()
 
-        return self.classifier(self.feature_extractor(x))
+            return self.classifier(self.feature_extractor(x))
 
-    def build_model(self):
-        return self
+        def build_model(self):
+            return self
 
-    def save(self, path: str):
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        torch.save(self.state_dict(), path)
+        def save(self, path: str):
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            torch.save(self.state_dict(), path)
 
-    @classmethod
-    def load_model(cls, path: str, input_shape=(64, 64, 3), num_classes: int = 4):
-        model = cls(input_shape=input_shape, num_classes=num_classes)
-        state = torch.load(path, map_location="cpu")
-        model.load_state_dict(state)
-        model.eval()
-        return model
+        @classmethod
+        def load_model(cls, path: str, input_shape=(64, 64, 3), num_classes: int = 4):
+            model = cls(input_shape=input_shape, num_classes=num_classes)
+            state = torch.load(path, map_location="cpu")
+            model.load_state_dict(state)
+            model.eval()
+            return model
+else:
+    class FaceDocumentCNN:  # type: ignore
+        """Fallback lightweight placeholder when PyTorch is omitted to conserve RAM."""
+
+        def __init__(self, input_shape: Tuple[int, int, int] = (64, 64, 3), num_classes: int = 4):
+            self.input_shape = (None, *input_shape)
+            self.output_shape = (None, num_classes)
+            self.num_classes = num_classes
+
+        def __call__(self, *args, **kwargs):
+            raise NotImplementedError("PyTorch is not installed in this environment.")
+
+        def forward(self, *args, **kwargs):
+            raise NotImplementedError("PyTorch is not installed in this environment.")
+
+        def build_model(self):
+            return self
+
+        @classmethod
+        def load_model(cls, path: str, input_shape=(64, 64, 3), num_classes: int = 4):
+            return None
 
 
-def preprocess_image_bytes(image_bytes: bytes, image_size=(64, 64)) -> torch.Tensor:
+def preprocess_image_bytes(image_bytes: bytes, image_size=(64, 64)):
     """Convert raw image bytes into a model-ready tensor sized for CNN inference."""
+    if not _TORCH_AVAILABLE or torch is None:
+        raise NotImplementedError("PyTorch is not installed in this environment.")
     image = Image.open(BytesIO(image_bytes)).convert("RGB").resize(image_size)
     array = np.asarray(image, dtype=np.float32) / 255.0
     tensor = torch.from_numpy(array).permute(2, 0, 1).unsqueeze(0)
     return tensor
 
 
-def get_model(model_path: str = MODEL_PATH, image_size=(64, 64)) -> Optional[FaceDocumentCNN]:
+def get_model(model_path: str = MODEL_PATH, image_size=(64, 64)):
     """Return a cached model instance so repeated screening requests avoid reloading weights."""
+    if not _TORCH_AVAILABLE or torch is None:
+        return None
     cache_key = f"{model_path}:{image_size[0]}x{image_size[1]}"
     if not os.path.exists(model_path):
         return None
